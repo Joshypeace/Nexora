@@ -8,6 +8,20 @@ A small floating application launcher for Windows. Press **Ctrl+Space**, type a 
 - Full keyboard control, single-click launching, Escape or click outside to dismiss
 - Lives in the tray; no administrator rights needed; nothing is ever executed during scanning
 
+## Install
+
+Pick one from `dist\` (see [Build](#build) to produce them):
+
+- **`Nexora-1.0.0-x64.msi`**
+  - Per-user installer. It needs no administrator rights and installs to `%LOCALAPPDATA%\Programs\Nexora`.
+  - It adds a Start menu shortcut and starts Nexora with Windows. Turn that off from the tray menu.
+  - It appears in *Settings → Apps*, and uninstalling removes everything it added.
+  - Your settings in `%LOCALAPPDATA%\Nexora` are kept on uninstall.
+- **`Nexora-1.0.0-portable-x64.zip`**
+  - Unzip anywhere and run `Nexora.exe`.
+
+The packages are not code-signed, so Windows SmartScreen may ask for confirmation the first time.
+
 ## Requirements
 
 | | |
@@ -24,21 +38,47 @@ The Qt location is set in `CMakePresets.json` (`CMAKE_PREFIX_PATH`, currently `D
 **One command** (from any shell):
 
 ```bat
-tools\build.cmd            :: release
+tools\build.cmd                    :: release build + tests + dist\Nexora
 tools\build.cmd debug
+tools\build.cmd release package    :: also the portable zip and the MSI
 ```
 
-This loads the MSVC environment, configures, builds, and deploys a self-contained copy to **`dist\Nexora\`** (`Nexora.exe` plus the Qt runtime, about 28 MB).
+This command:
+1. Loads the MSVC environment, configures and builds.
+2. Runs the headless tests.
+3. Deploys a self-contained copy to **`dist\Nexora\`** (`Nexora.exe` plus the Qt runtime, about 28 MB).
 
-**Visual Studio:** *File → Open → Folder…*, select the repository, choose the `x64 Release` preset, and build `Nexora.exe`. Build the `deploy` target to refresh `dist\Nexora`.
+With `package`, it also writes `dist\Nexora-<version>-portable-x64.zip`. If [WiX Toolset v3](https://wixtoolset.org/docs/wix3/) is installed, it writes `dist\Nexora-<version>-x64.msi` too.
+
+**Visual Studio:**
+1. *File → Open → Folder…*, select the repository, and choose the `x64 Release` preset.
+2. Build `Nexora.exe`.
+3. Build the `deploy`, `portable` or `installer` targets for distribution.
 
 **Manually** (from a *x64 Native Tools* prompt):
 
 ```bat
 cmake --preset release
 cmake --build --preset release
+ctest --preset release              :: all tests (the UI test briefly opens a window)
 cmake --build --preset release --target deploy
+cmake --build --preset release --target portable installer
 ```
+
+### Tests
+
+`tests/` holds Qt Test suites run by CTest. They link the same `NexoraCore` library as the app.
+
+| Suite | Covers |
+|---|---|
+| `tst_search` | Case-insensitive filtering, prefix/word-start/initials ranking, multi-term queries, hidden apps |
+| `tst_hotkey` | Shortcut validation, registration conflicts, release |
+| `tst_cache` | Round trip including icons and Unicode; corrupt, outdated and out-of-range files |
+| `tst_discovery` | Custom-folder depth and noise filtering, `.url` handling, Start menu discovery, cancellation, icon extraction (desktop and packaged) |
+| `tst_launcher` | Elevation rules, error reporting, async result delivery and lifetime safety |
+| `tst_ui` | The real launcher window: typing, keyboard navigation, column layout, hover highlight, `+` menu, context menu, empty/loading states, Enter and Esc. It saves snapshots to `out/build/<preset>/tests/snapshots` and checks the OS cursor is never moved. |
+
+Tests use a temporary data folder (`NEXORA_DATA_DIR`), so they never touch your real settings or cache. `tst_ui` is labelled `ui`; skip it with `ctest -LE ui`.
 
 `dist\Nexora` uses the Microsoft Visual C++ runtime that is already installed on almost every Windows PC. If it is missing, install the [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
@@ -69,7 +109,7 @@ customFolders=D:\\PortableApps
 hiddenApps=app:c:/windows/system32/...|
 ```
 
-The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. Deleting it is always safe.
+The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. Deleting it is always safe. Set the `NEXORA_DATA_DIR` environment variable to keep settings and cache in another folder, for example next to a portable copy.
 
 ## How it works
 
@@ -82,7 +122,9 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 | Launching | `AppLauncher` | `ShellExecuteEx` / `IApplicationActivationManager`, off the UI thread |
 | Global shortcut | `GlobalHotkey` | `RegisterHotKey` on a message-only window; also receives "show" from a second instance |
 | Settings | `Settings` | INI file plus the HKCU `Run` value |
-| Wiring | `NexoraApp`, `main` | Tray menu, single instance, theme |
+| Theme | `Theme` | Palette, fonts, rounded translucent menus (including Qt's built-in ones) |
+| Wiring | `NexoraApp`, `main` | Tray menu, folder watching, single instance |
+| Packaging | `packaging/make_installer.cmake` | Generates and builds the per-user WiX MSI from `dist\Nexora` |
 
 **Discovery sources**, in priority order for deduplication:
 
@@ -96,21 +138,26 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 4. Packaged / Microsoft Store apps from the shell Apps folder (AUMIDs). Logos are read from each package's manifest, using the same unplated asset Start uses.
 5. Uninstall registry entries (HKCU and HKLM, 64- and 32-bit). An entry is used only if its `DisplayIcon` points to a real program and it isn't already listed.
 
-Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never crawls whole drives and never runs anything; scans stop promptly when Nexora quits. On start the cached list appears immediately, and a fresh scan runs in the background. Opening the launcher triggers another scan once the data is older than 10 minutes. Background scans re-extract icons only for new entries, or when a shortcut or the program it points to has changed. `+` → *Refresh applications* rescans and re-extracts every icon. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
+Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never crawls whole drives and never runs anything; scans stop promptly when Nexora quits.
 
-**Frosted glass:** the launcher is a regular (non-layered) top-level window. Its native frame is folded into the client area with Qt's `QWindowsWindow::setCustomMargins`, so DWM still provides the shadow, Windows 11 rounded corners, open/close transitions and the `DWMSBT_TRANSIENTWINDOW` acrylic backdrop. The background artwork is painted over it at partial opacity under a dark navy overlay, so the blurred desktop shows through.
+On start the cached list appears immediately, and a fresh scan runs in the background. Nexora rescans when:
+- the Start menu folders or your custom folders change (watched live; the rescan waits about 2.5 s after the last change so installers settle first);
+- the launcher is opened and the data is older than 10 minutes. Background scans re-extract icons only for new entries, or when a shortcut or the program it points to has changed. `+` → *Refresh applications* rescans and re-extracts every icon. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
+
+**Frosted glass:** the launcher is a regular (non-layered) top-level window. Its native frame is folded into the client area with Qt's `QWindowsWindow::setCustomMargins`, so DWM still provides the shadow, Windows 11 rounded corners, open/close transitions and the `DWMSBT_TRANSIENTWINDOW` acrylic backdrop. The background artwork is painted over it at partial opacity under a dark navy overlay, so the blurred desktop shows through. While the launcher is open every monitor is dimmed, and a click on any of them dismisses it without reaching the window underneath.
+
+**Footprint:** between uses Nexora unloads the shell extension DLLs that icon extraction pulls in and trims its working set, to about 1 MB resident (about 40 MB private). When started with `--background` it pre-renders the launcher off-screen, so the first Ctrl+Space opens about as fast as later ones.
 
 ## Known limitations
 
 - **Qt private API.** `setCustomMargins` lives in `Qt6::GuiPrivate`. It is stable in practice but not covered by Qt's compatibility promise, so it may need a touch-up on future Qt versions.
 - **Windows 10** falls back to the legacy acrylic accent (`SetWindowCompositionAttribute`) and has square corners. This path compiles but has only been tested on Windows 11. If no blur is available at all, an opaque gradient is painted instead.
 - **Ctrl+Space** is also used by some input-method editors (e.g. Chinese IMEs). If registration fails, Nexora shows a tray notification; pick another shortcut from the tray menu. A shortcut must include Ctrl, Alt or Win, since a global hotkey takes its key away from every other app. Keys that only exist on non-Latin keyboard layouts may be rejected.
-- The desktop is dimmed only on the monitor where the launcher opens. Clicking another monitor still dismisses the launcher, but that click also reaches the window under it.
-- New Start menu entries are not watched live. They appear on the next stale refresh (10 minutes) or after *Refresh applications*.
 - Registry discovery is heuristic. Occasional helper programs can slip through; hide them with a right-click.
 - *Run as administrator* and *Open file location* are not offered for packaged apps, and *Run as administrator* is not offered for `.url` or ClickOnce entries.
-- Memory use is around 110 MB, mostly from shell extensions the icon APIs load into the process.
-- There is no installer. `dist\Nexora` is a portable folder.
+- Apps installed only through the uninstall registry, with no Start menu shortcut, are picked up on the next stale or manual refresh. The registry is not watched.
+- The MSI and the executable are not code-signed. Signing needs a code-signing certificate (`signtool` from the Windows SDK can apply one).
+- The MSI is built with WiX Toolset v3. WiX v4/v5 use a different command line and are not supported by `packaging/make_installer.cmake`.
 
 ## Assets
 
