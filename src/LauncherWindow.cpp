@@ -216,6 +216,10 @@ LauncherWindow::LauncherWindow(QWidget* parent)
     connect(m_search, &QLineEdit::textChanged, this, &LauncherWindow::onQueryChanged);
     connect(m_view, &QListView::clicked, this, [this](const QModelIndex& index) { launchIndex(index); });
     connect(m_view, &QListView::customContextMenuRequested, this, &LauncherWindow::showItemMenu);
+    // Overlays are sized per monitor; if monitors change while open, simply close.
+    connect(qApp, &QGuiApplication::screenAdded, this, &LauncherWindow::dismiss);
+    connect(qApp, &QGuiApplication::screenRemoved, this, &LauncherWindow::dismiss);
+    connect(qApp, &QGuiApplication::primaryScreenChanged, this, &LauncherWindow::dismiss);
     connect(m_filter, &QAbstractItemModel::modelReset, this, &LauncherWindow::updateState);
     connect(m_filter, &QAbstractItemModel::layoutChanged, this, &LauncherWindow::updateState);
     connect(m_filter, &QAbstractItemModel::rowsInserted, this, &LauncherWindow::updateState);
@@ -503,7 +507,8 @@ void LauncherWindow::updateGrid()
     // QListView lays wrapped items out within the maximum viewport minus a scroll bar's
     // extent (whether or not one is shown), and wraps when a row fills it exactly. Size the
     // cells against that width so the column count doesn't change with the result count.
-    const int scrollBar = m_view->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_view);
+    // Same query as QListViewPrivate::prepareItemsLayout, so the style sheet's width applies.
+    const int scrollBar = m_view->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_view->verticalScrollBar());
     const int width = m_view->maximumViewportSize().width() - scrollBar - 2;
     if (width <= 0)
         return;
@@ -689,6 +694,16 @@ bool LauncherWindow::nativeEvent(const QByteArray& eventType, void* message, qin
     case WM_NCHITTEST:
         // The whole window is client area: no resize borders, no caption dragging.
         *result = HTCLIENT;
+        return true;
+    case WM_CLOSE:
+        // Alt+F4 on the open launcher just dismisses it. A close request while it is
+        // hidden comes from outside (an installer upgrading or removing Nexora, or
+        // taskkill), so shut the whole tray app down cleanly.
+        if (isVisible())
+            dismiss();
+        else
+            QCoreApplication::quit();
+        *result = 0;
         return true;
     case WM_DPICHANGED:
         QTimer::singleShot(0, this, [this] {

@@ -4,7 +4,8 @@
 #include "GlobalHotkey.h"
 #include "Settings.h"
 
-#include <QFileSystemWatcher>
+#include "FolderWatcher.h"
+
 #include <QObject>
 #include <QSystemTrayIcon>
 #include <QTimer>
@@ -45,7 +46,7 @@ private:
     std::unique_ptr<LauncherWindow> m_window;
     std::unique_ptr<QMenu> m_trayMenu;
     QSystemTrayIcon m_tray;
-    QFileSystemWatcher m_watcher;     // Start menu and custom folders
+    FolderWatcher m_watcher;          // Start menu and custom folder trees
     QTimer m_changeDebounce;          // coalesces bursts of changes from installers
     QAction* m_openAction = nullptr;
     QAction* m_restoreHiddenAction = nullptr;

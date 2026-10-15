@@ -25,9 +25,11 @@ Settings::Settings()
 QString Settings::dataDirectory()
 {
     // NEXORA_DATA_DIR lets the test suite (or a portable setup) keep settings and cache elsewhere.
+    // Relative values are taken relative to Nexora.exe, not the working directory (which is
+    // System32 when started from the Run key).
     const QString overridden = qEnvironmentVariable("NEXORA_DATA_DIR");
     const QString dir = !overridden.isEmpty()
-        ? overridden
+        ? QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(overridden))
         : QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Nexora");
     QDir().mkpath(dir);
     return dir;

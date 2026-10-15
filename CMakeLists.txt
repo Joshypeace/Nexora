@@ -50,6 +50,7 @@ qt_add_library(NexoraCore STATIC
     src/NexoraApp.h           src/NexoraApp.cpp
     src/ShortcutDialog.h      src/ShortcutDialog.cpp
     src/Theme.h               src/Theme.cpp
+    src/FolderWatcher.h       src/FolderWatcher.cpp
 )
 # INTERFACE only: on the library itself, src/ on the include path would make the
 # Windows SDK's <appmodel.h> resolve to our AppModel.h (case-insensitive filesystem).
