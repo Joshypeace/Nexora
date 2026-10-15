@@ -15,7 +15,7 @@ Pick one from `dist\` (see [Build](#build) to produce them):
 - **`Nexora-1.0.0-x64.msi`**
   - Per-user installer. It needs no administrator rights and installs to `%LOCALAPPDATA%\Programs\Nexora`.
   - It adds a Start menu shortcut and starts Nexora with Windows. Turn that off from the tray menu; upgrades and repairs keep your choice.
-  - A running Nexora is closed automatically during upgrades and uninstalls.
+  - A running Nexora is closed automatically during installs, upgrades and uninstalls, including a portable copy that happens to be running.
   - Reinstalling a rebuilt package of the same version replaces the existing install.
   - It appears in *Settings → Apps*, and uninstalling removes everything it added.
   - Your settings in `%LOCALAPPDATA%\Nexora` are kept on uninstall.
@@ -145,7 +145,11 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never crawls whole drives and never runs anything; scans stop promptly when Nexora quits.
 
 On start the cached list appears immediately, and a fresh scan runs in the background. Nexora rescans when:
-- the Start menu folders or your custom folders change. These are watched live, with one recursive `ReadDirectoryChangesW` handle per folder tree that never locks the folders inside it. Only changes involving programs, shortcuts or folders count, and Nexora's own data folder is ignored. The rescan waits about 2.5 s after the last change so installers settle first;
+- the Start menu folders or your custom folders change. These are watched live, with one recursive `ReadDirectoryChangesW` handle per folder tree that never locks the folders inside it.
+  - Only changes that could affect an app count: programs and shortcuts added, changed, renamed or removed, and folders added, renamed or removed.
+  - Writes to and deletions of other files (logs, caches) are ignored, as are changes deeper inside a custom folder than discovery scans, and Nexora's own data folder.
+  - A watched folder that is missing (for example on a drive that isn't mounted yet) or gets deleted is retried every minute.
+  - The rescan waits about 2.5 s after the last change so installers settle first;
 - the launcher is opened and the data is older than 10 minutes. Background scans re-extract icons only for new entries, or when a shortcut or the program it points to has changed. `+` → *Refresh applications* rescans and re-extracts every icon. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
 
 **Frosted glass:** the launcher is a regular (non-layered) top-level window. Its native frame is folded into the client area with Qt's `QWindowsWindow::setCustomMargins`, so DWM still provides the shadow, Windows 11 rounded corners, open/close transitions and the `DWMSBT_TRANSIENTWINDOW` acrylic backdrop. The background artwork is painted over it at partial opacity under a dark navy overlay, so the blurred desktop shows through. While the launcher is open every monitor is dimmed, and a click on any of them dismisses it without reaching the window underneath.

@@ -152,6 +152,18 @@ ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
     <Feature Id=\"Autostart\" Title=\"Start with Windows\" Level=\"1\">
       <ComponentRef Id=\"CMP_Autostart\" />
     </Feature>
+
+    <!-- If the user re-enabled autostart from the tray after an upgrade dropped CMP_Autostart,
+         no component owns the Run value any more. Delete it on a real uninstall (not during
+         an upgrade's removal of the old version) so it never points at a removed exe. -->
+    <CustomAction Id=\"SetRemoveAutostartCommand\" Property=\"RemoveAutostart\"
+                  Value=\"&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /f\" />
+    <CustomAction Id=\"RemoveAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
+                  Execute=\"deferred\" Impersonate=\"yes\" Return=\"ignore\" />
+    <InstallExecuteSequence>
+      <Custom Action=\"SetRemoveAutostartCommand\" Before=\"RemoveAutostart\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+      <Custom Action=\"RemoveAutostart\" Before=\"RemoveFiles\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+    </InstallExecuteSequence>
   </Product>
 </Wix>
 ")

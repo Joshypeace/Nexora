@@ -112,10 +112,10 @@ private slots:
         QVERIFY(!AppDiscovery::entryForFile(m_root.filePath(QStringLiteral("missing.exe")), AppSource::Manual, entry));
     }
 
-    void watchesStartMenuAndCustomFolders()
+    void reportsStartMenuFolders()
     {
-        const QStringList folders = AppDiscovery::watchedFolders({{m_root.path()}, {}});
-        QVERIFY(folders.contains(QDir::cleanPath(m_root.path())));
+        const QStringList folders = AppDiscovery::startMenuFolders();
+        QCOMPARE(folders.size(), 2);
         QVERIFY(std::any_of(folders.begin(), folders.end(),
                             [](const QString& f) { return f.endsWith(QStringLiteral("Start Menu/Programs")); }));
     }

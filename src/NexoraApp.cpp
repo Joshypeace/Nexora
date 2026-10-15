@@ -157,7 +157,13 @@ void NexoraApp::updateWatchedFolders()
 {
     // Our own cache and settings writes must never trigger a rescan (they would loop),
     // even if the data folder sits inside a watched custom folder.
-    m_watcher.setFolders(AppDiscovery::watchedFolders(discoveryOptions()), {Settings::dataDirectory()});
+    std::vector<FolderWatcher::Root> roots;
+    for (const QString& folder : AppDiscovery::startMenuFolders())
+        roots.push_back({folder, -1}); // the Start menu scan is unlimited in depth
+    // Files at most kCustomFolderDepth subfolders down are scanned: that is depth + 1 path segments.
+    for (const QString& folder : m_settings.customFolders())
+        roots.push_back({folder, AppDiscovery::kCustomFolderDepth + 1});
+    m_watcher.setFolders(roots, {Settings::dataDirectory()});
 }
 
 AppDiscovery::Options NexoraApp::discoveryOptions() const
