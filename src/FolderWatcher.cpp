@@ -18,6 +18,18 @@ QString normalized(const QString& path)
     return QDir::cleanPath(QDir::fromNativeSeparators(path)).toLower();
 }
 
+// Where a directory handle currently points. A handle follows its folder when the folder
+// is moved (e.g. into the Recycle Bin), so this changes if the watched root went away.
+QString finalPath(HANDLE directory)
+{
+    std::array<wchar_t, 32768> buffer = {};
+    const DWORD length =
+        GetFinalPathNameByHandleW(directory, buffer.data(), static_cast<DWORD>(buffer.size()), FILE_NAME_NORMALIZED);
+    if (length == 0 || length >= buffer.size())
+        return {};
+    return QString::fromWCharArray(buffer.data(), length).toLower();
+}
+
 bool hasAppSuffix(const QString& suffix)
 {
     return suffix == u"lnk" || suffix == u"url" || suffix == u"appref-ms" || suffix == u"exe";
@@ -27,6 +39,7 @@ bool hasAppSuffix(const QString& suffix)
 
 struct FolderWatcher::Watch {
     QString root;
+    QString openedPath; // finalPath() when opened
     int maxDepth = -1;
     HANDLE directory = INVALID_HANDLE_VALUE;
     HANDLE event = nullptr;
@@ -94,10 +107,11 @@ void FolderWatcher::setFolders(const std::vector<Root>& roots, const QStringList
     for (const Root& root : m_roots)
         m_watches.push_back(open(root));
 
-    if (activeCount() < static_cast<int>(m_roots.size()))
-        m_retry.start();
-    else
+    // The periodic check also notices roots that were moved away (see retryInactive).
+    if (m_roots.empty())
         m_retry.stop();
+    else
+        m_retry.start();
 }
 
 int FolderWatcher::activeCount() const
@@ -118,6 +132,7 @@ std::unique_ptr<FolderWatcher::Watch> FolderWatcher::open(const Root& root)
     watch->event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (watch->directory == INVALID_HANDLE_VALUE || !watch->event)
         return nullptr;
+    watch->openedPath = finalPath(watch->directory);
 
     Watch* raw = watch.get();
     watch->notifier = std::make_unique<QWinEventNotifier>(watch->event);
@@ -158,8 +173,11 @@ void FolderWatcher::onSignaled(Watch& watch)
                 return full == prefix || full.startsWith(prefix + u'/');
             });
             // Discovery only looks so deep below custom folders; deeper churn is irrelevant.
+            // Files count up to maxDepth segments; a folder at maxDepth could only hold
+            // files deeper than that, so folder-like events must be shallower.
             const int depth = static_cast<int>(name.count(u'/')) + 1;
-            const bool tooDeep = watch.maxDepth >= 0 && depth > watch.maxDepth;
+            const bool appFile = hasAppSuffix(QFileInfo(name).suffix().toLower());
+            const bool tooDeep = watch.maxDepth >= 0 && (appFile ? depth > watch.maxDepth : depth >= watch.maxDepth);
             if (!ignored && !tooDeep && full != rootKey && isRelevant(full, info->Action == FILE_ACTION_MODIFIED))
                 relevant = true;
             if (info->NextEntryOffset == 0)
@@ -187,18 +205,22 @@ void FolderWatcher::onSignaled(Watch& watch)
 
 void FolderWatcher::retryInactive()
 {
-    bool recovered = false;
+    bool changedRoots = false;
     for (size_t i = 0; i < m_roots.size(); ++i) {
-        if (m_watches[i] && !m_watches[i]->dead)
-            continue;
+        std::unique_ptr<Watch>& current = m_watches[i];
+        if (current && !current->dead) {
+            // Still pointing where it was opened? A folder moved away (recycled, renamed)
+            // keeps the handle valid, so only its path reveals that the root is gone.
+            if (finalPath(current->directory) == current->openedPath)
+                continue;
+            current.reset();
+            changedRoots = true; // its applications are gone from the original location
+        }
         if (std::unique_ptr<Watch> watch = open(m_roots[i])) {
-            m_watches[i] = std::move(watch);
-            recovered = true;
+            current = std::move(watch);
+            changedRoots = true; // a folder that (re)appeared may hold new applications
         }
     }
-    if (activeCount() == static_cast<int>(m_roots.size()))
-        m_retry.stop();
-    // A folder that (re)appeared may hold new applications.
-    if (recovered)
+    if (changedRoots)
         emit changed();
 }

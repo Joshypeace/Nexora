@@ -160,10 +160,21 @@ ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
                   Value=\"&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /f\" />
     <CustomAction Id=\"RemoveAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
                   Execute=\"deferred\" Impersonate=\"yes\" Return=\"ignore\" />
+    <!-- If the uninstall fails or is cancelled afterwards, put the user's autostart back.
+         Nexora always writes the value in exactly this format (Settings::startupCommand). -->
+    <CustomAction Id=\"SetRestoreAutostartCommand\" Property=\"RestoreAutostart\"
+                  Value=\"&quot;[System64Folder]reg.exe&quot; add &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /t REG_SZ /d &quot;\\&quot;[INSTALLFOLDER]Nexora.exe\\&quot; --background&quot; /f\" />
+    <CustomAction Id=\"RestoreAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
+                  Execute=\"rollback\" Impersonate=\"yes\" Return=\"ignore\" />
     <InstallExecuteSequence>
+      <Custom Action=\"SetRestoreAutostartCommand\" Before=\"RestoreAutostart\"><![CDATA[EXISTING_AUTOSTART AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+      <Custom Action=\"RestoreAutostart\" Before=\"SetRemoveAutostartCommand\"><![CDATA[EXISTING_AUTOSTART AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
       <Custom Action=\"SetRemoveAutostartCommand\" Before=\"RemoveAutostart\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
       <Custom Action=\"RemoveAutostart\" Before=\"RemoveFiles\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
     </InstallExecuteSequence>
+    <!-- Test hook: msiexec ... WIXFAILWHENDEFERRED=1 forces a rollback at the end of the
+         deferred sequence. Inactive unless that property is set. -->
+    <CustomActionRef Id=\"WixFailWhenDeferred\" />
   </Product>
 </Wix>
 ")

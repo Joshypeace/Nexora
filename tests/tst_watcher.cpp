@@ -72,9 +72,11 @@ private slots:
 
     void ignoresChangesBelowTheScannedDepth()
     {
-        QDir(m_root.path()).mkpath(QStringLiteral("Tools/Editor/plugins/deep"));
-        QTest::qWait(500); // the folder creation itself is within range; let it pass
         QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
+        // A folder at the depth limit can only hold files deeper than discovery scans.
+        QVERIFY(QDir(m_root.path()).mkpath(QStringLiteral("Tools/Editor/tmp-lock")));
+        QVERIFY(QDir(m_root.filePath(QStringLiteral("Tools/Editor/tmp-lock"))).removeRecursively());
+        QVERIFY(QDir(m_root.path()).mkpath(QStringLiteral("Tools/Editor/plugins/deep")));
         write(m_root.filePath(QStringLiteral("Tools/Editor/plugins/deep/Helper.exe")));
         QVERIFY(!settle(spy));
     }
@@ -131,6 +133,32 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(watcher.activeCount(), 1, 3000);
         spy.clear();
         write(later + QStringLiteral("/New.exe"));
+        QVERIFY(spy.wait(3000));
+    }
+
+    void noticesRootsMovedAway()
+    {
+        // Explorer's delete moves a folder into the Recycle Bin: the handle follows it and
+        // stays valid, so the move is only visible through the handle's current path.
+        QTemporaryDir parent;
+        const QString root = parent.filePath(QStringLiteral("PortableApps"));
+        QVERIFY(QDir().mkpath(root));
+        FolderWatcher watcher;
+        watcher.setRetryInterval(200);
+        watcher.setFolders({{root, 3}}, {});
+        QCOMPARE(watcher.activeCount(), 1);
+
+        QSignalSpy spy(&watcher, &FolderWatcher::changed);
+        QVERIFY(QDir(parent.path()).rename(QStringLiteral("PortableApps"), QStringLiteral("Recycled")));
+        QVERIFY(spy.wait(3000));
+        QTRY_COMPARE_WITH_TIMEOUT(watcher.activeCount(), 0, 3000);
+
+        // A new folder with the original name is picked up and watched.
+        spy.clear();
+        QVERIFY(QDir().mkpath(root));
+        QTRY_COMPARE_WITH_TIMEOUT(watcher.activeCount(), 1, 3000);
+        spy.clear();
+        write(root + QStringLiteral("/Fresh.exe"));
         QVERIFY(spy.wait(3000));
     }
 
