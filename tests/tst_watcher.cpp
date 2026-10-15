@@ -136,6 +136,28 @@ private slots:
         QVERIFY(spy.wait(3000));
     }
 
+    void noticesRemovalOfFoldersHoldingKnownApps()
+    {
+        // "node-v20.11.1" has a "suffix", so only the known app inside identifies it as relevant.
+        const QString folder = m_root.filePath(QStringLiteral("node-v20.11.1"));
+        write(folder + QStringLiteral("/node.exe"));
+        QTest::qWait(500);
+        m_watcher->setKnownPaths({folder + QStringLiteral("/node.exe")});
+
+        QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
+        QVERIFY(QDir(m_root.path()).rename(QStringLiteral("node-v20.11.1"), QStringLiteral("node-old.1")));
+        QVERIFY(spy.wait(3000));
+        settle(spy);
+
+        // The same kind of folder without known apps inside stays quiet.
+        m_watcher->setKnownPaths({});
+        QVERIFY(QDir(m_root.path()).mkpath(QStringLiteral("cache-v1.2")));
+        QTest::qWait(500);
+        spy.clear();
+        QVERIFY(QDir(m_root.filePath(QStringLiteral("cache-v1.2"))).removeRecursively());
+        QVERIFY(!settle(spy));
+    }
+
     void noticesRootsMovedAway()
     {
         // Explorer's delete moves a folder into the Recycle Bin: the handle follows it and

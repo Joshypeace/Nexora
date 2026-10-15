@@ -12,6 +12,13 @@ foreach(var DIST_DIR OUT_DIR VERSION WIX_BIN ICON)
     endif()
 endforeach()
 
+# -DTEST_HOOKS=ON adds WiX's WixFailWhenDeferred so rollback can be exercised with
+# `msiexec ... WIXFAILWHENDEFERRED=1`. Never enabled for release packages.
+set(test_hooks_xml "")
+if(TEST_HOOKS)
+    set(test_hooks_xml "    <CustomActionRef Id=\"WixFailWhenDeferred\" />\n")
+endif()
+
 # Stable across releases; MajorUpgrade replaces older versions with the same UpgradeCode.
 set(UPGRADE_CODE "6F7C3A52-1D4E-4B8F-9A2C-5E0B7D31C9A4")
 set(GUID_NAMESPACE "2B9E6C41-7F03-4D5A-8E1B-C6A9D0F43E72")
@@ -81,7 +88,13 @@ foreach(dir IN LISTS dirs)
 endforeach()
 
 string(UUID shortcut_guid NAMESPACE "${GUID_NAMESPACE}" NAME "component:shortcuts" TYPE SHA1 UPPER)
-string(UUID autostart_guid NAMESPACE "${GUID_NAMESPACE}" NAME "component:autostart" TYPE SHA1 UPPER)
+
+# Autostart commands (see the comment in the generated .wxs). reg.exe stores exactly
+#   "<install folder>\Nexora.exe" --background
+set(reg_delete "&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /f")
+set(reg_add "&quot;[System64Folder]reg.exe&quot; add &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /t REG_SZ /d &quot;\\&quot;[INSTALLFOLDER]Nexora.exe\\&quot; --background&quot; /f")
+set(fresh_install "NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT EXISTING_AUTOSTART AND NOT REMOVE")
+set(owned_uninstall "EXISTING_AUTOSTART ~= INSTALLED_AUTOSTART_COMMAND AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE")
 string(UUID programs_guid NAMESPACE "${GUID_NAMESPACE}" NAME "component:programs-folder" TYPE SHA1 UPPER)
 file(TO_NATIVE_PATH "${ICON}" icon_source)
 
@@ -103,7 +116,7 @@ file(WRITE "${wxs}" "<?xml version=\"1.0\" encoding=\"utf-8\"?>
          so its files are not in use during an upgrade or uninstall. -->
     <util:CloseApplication Id=\"CloseNexora\" Target=\"Nexora.exe\" CloseMessage=\"yes\" RebootPrompt=\"no\" />
 
-    <!-- Current \"Start with Windows\" state, so upgrades and repairs keep the user's choice. -->
+    <!-- Current \"Start with Windows\" entry (the tray menu writes and deletes it too). -->
     <Property Id=\"EXISTING_AUTOSTART\">
       <RegistrySearch Id=\"FindAutostart\" Root=\"HKCU\" Key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Run\"
                       Name=\"Nexora\" Type=\"raw\" />
@@ -136,45 +149,45 @@ ${component_xml}
       <RegistryValue Root=\"HKCU\" Key=\"${REG_KEY}\" Name=\"CMP_Shortcuts\" Type=\"integer\" Value=\"1\" KeyPath=\"yes\" />
     </Component>
 
-    <!-- Same value the tray's \"Start with Windows\" toggle writes, so the two stay in sync
-         and uninstalling removes it. Enabled on a fresh install; afterwards (upgrade or
-         repair) only kept if the user still has it on. Transitive re-evaluates the condition. -->
-    <Component Id=\"CMP_Autostart\" Directory=\"INSTALLFOLDER\" Guid=\"${autostart_guid}\" Transitive=\"yes\">
-      <Condition><![CDATA[(NOT Installed AND NOT WIX_UPGRADE_DETECTED) OR EXISTING_AUTOSTART]]></Condition>
-      <RegistryValue Root=\"HKCU\" Key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Run\" Name=\"Nexora\"
-                     Type=\"string\" Value=\"&quot;[INSTALLFOLDER]Nexora.exe&quot; --background\" KeyPath=\"yes\" />
-    </Component>
-
     <Feature Id=\"Main\" Title=\"Nexora\" Level=\"1\" Absent=\"disallow\">
 ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
       <ComponentRef Id=\"CMP_Shortcuts\" />
     </Feature>
-    <Feature Id=\"Autostart\" Title=\"Start with Windows\" Level=\"1\">
-      <ComponentRef Id=\"CMP_Autostart\" />
-    </Feature>
 
-    <!-- If the user re-enabled autostart from the tray after an upgrade dropped CMP_Autostart,
-         no component owns the Run value any more. Delete it on a real uninstall (not during
-         an upgrade's removal of the old version) so it never points at a removed exe. -->
-    <CustomAction Id=\"SetRemoveAutostartCommand\" Property=\"RemoveAutostart\"
-                  Value=\"&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /f\" />
+    <!-- \"Start with Windows\" is the same HKCU Run value the tray toggle writes
+         (Settings::startupCommand). It is managed with conditioned actions instead of a
+         component, because Windows Installer deletes a component-owned value by name on
+         uninstall even when it points at a portable copy, and re-creates it on repair.
+           - Fresh install: add it, unless a Nexora entry already exists.
+           - Upgrades and repairs: leave it exactly as the user set it.
+           - Real uninstall: remove it only if it points at this installation.
+         Every change has a rollback counterpart. -->
+    <CustomAction Id=\"SetInstalledAutostartCommand\" Property=\"INSTALLED_AUTOSTART_COMMAND\"
+                  Value=\"&quot;[INSTALLFOLDER]Nexora.exe&quot; --background\" />
+    <CustomAction Id=\"SetAddAutostartCommand\" Property=\"AddAutostart\" Value=\"${reg_add}\" />
+    <CustomAction Id=\"AddAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
+                  Execute=\"deferred\" Impersonate=\"yes\" Return=\"ignore\" />
+    <CustomAction Id=\"SetUndoAddAutostartCommand\" Property=\"UndoAddAutostart\" Value=\"${reg_delete}\" />
+    <CustomAction Id=\"UndoAddAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
+                  Execute=\"rollback\" Impersonate=\"yes\" Return=\"ignore\" />
+    <CustomAction Id=\"SetRemoveAutostartCommand\" Property=\"RemoveAutostart\" Value=\"${reg_delete}\" />
     <CustomAction Id=\"RemoveAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
                   Execute=\"deferred\" Impersonate=\"yes\" Return=\"ignore\" />
-    <!-- If the uninstall fails or is cancelled afterwards, put the user's autostart back.
-         Nexora always writes the value in exactly this format (Settings::startupCommand). -->
-    <CustomAction Id=\"SetRestoreAutostartCommand\" Property=\"RestoreAutostart\"
-                  Value=\"&quot;[System64Folder]reg.exe&quot; add &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /t REG_SZ /d &quot;\\&quot;[INSTALLFOLDER]Nexora.exe\\&quot; --background&quot; /f\" />
+    <CustomAction Id=\"SetRestoreAutostartCommand\" Property=\"RestoreAutostart\" Value=\"${reg_add}\" />
     <CustomAction Id=\"RestoreAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
                   Execute=\"rollback\" Impersonate=\"yes\" Return=\"ignore\" />
     <InstallExecuteSequence>
-      <Custom Action=\"SetRestoreAutostartCommand\" Before=\"RestoreAutostart\"><![CDATA[EXISTING_AUTOSTART AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
-      <Custom Action=\"RestoreAutostart\" Before=\"SetRemoveAutostartCommand\"><![CDATA[EXISTING_AUTOSTART AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
-      <Custom Action=\"SetRemoveAutostartCommand\" Before=\"RemoveAutostart\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
-      <Custom Action=\"RemoveAutostart\" Before=\"RemoveFiles\"><![CDATA[REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+      <Custom Action=\"SetInstalledAutostartCommand\" After=\"CostFinalize\" />
+      <Custom Action=\"SetUndoAddAutostartCommand\" Before=\"UndoAddAutostart\"><![CDATA[${fresh_install}]]></Custom>
+      <Custom Action=\"UndoAddAutostart\" Before=\"SetAddAutostartCommand\"><![CDATA[${fresh_install}]]></Custom>
+      <Custom Action=\"SetAddAutostartCommand\" Before=\"AddAutostart\"><![CDATA[${fresh_install}]]></Custom>
+      <Custom Action=\"AddAutostart\" After=\"InstallFiles\"><![CDATA[${fresh_install}]]></Custom>
+      <Custom Action=\"SetRestoreAutostartCommand\" Before=\"RestoreAutostart\"><![CDATA[${owned_uninstall}]]></Custom>
+      <Custom Action=\"RestoreAutostart\" Before=\"SetRemoveAutostartCommand\"><![CDATA[${owned_uninstall}]]></Custom>
+      <Custom Action=\"SetRemoveAutostartCommand\" Before=\"RemoveAutostart\"><![CDATA[${owned_uninstall}]]></Custom>
+      <Custom Action=\"RemoveAutostart\" Before=\"RemoveFiles\"><![CDATA[${owned_uninstall}]]></Custom>
     </InstallExecuteSequence>
-    <!-- Test hook: msiexec ... WIXFAILWHENDEFERRED=1 forces a rollback at the end of the
-         deferred sequence. Inactive unless that property is set. -->
-    <CustomActionRef Id=\"WixFailWhenDeferred\" />
+${test_hooks_xml}
   </Product>
 </Wix>
 ")

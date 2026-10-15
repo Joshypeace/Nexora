@@ -15,6 +15,7 @@ Pick one from `dist\` (see [Build](#build) to produce them):
 - **`Nexora-1.0.0-x64.msi`**
   - Per-user installer. It needs no administrator rights and installs to `%LOCALAPPDATA%\Programs\Nexora`.
   - It adds a Start menu shortcut and starts Nexora with Windows. Turn that off from the tray menu; upgrades and repairs keep your choice.
+  - If a "Start with Windows" entry already exists (for example for a portable copy), installing leaves it alone.
   - A running Nexora is closed automatically during installs, upgrades and uninstalls, including a portable copy that happens to be running.
   - Reinstalling a rebuilt package of the same version replaces the existing install.
   - It appears in *Settings → Apps*, and uninstalling removes everything it added.
@@ -169,9 +170,10 @@ On start the cached list appears immediately, and a fresh scan runs in the backg
 - Apps installed only through the uninstall registry, with no Start menu shortcut, are picked up on the next stale or manual refresh. The registry is not watched.
 - The MSI and the executable are not code-signed. Signing needs a code-signing certificate (`signtool` from the Windows SDK can apply one).
 - **An uninstall that fails or is cancelled part-way** is rolled back. Nexora keeps working and your "Start with Windows" setting is restored.
-  - Windows Installer's own rollback of a per-user uninstall is incomplete. Verified with a package stripped of every custom action, so this is not specific to Nexora's package.
-  - Afterwards the product can't be repaired, and the next uninstall leaves the files and Start menu shortcut behind.
-  - To recover, install the same `.msi` file again, then uninstall it; that removes everything.
+  - On the development machine (Windows 11 22H2), a forced failure showed that Windows Installer's own rollback of a per-user uninstall is incomplete. The same happened with a package stripped of every custom action, so it is not specific to Nexora's package.
+  - Afterwards the product could not be repaired, and the next uninstall left the files and Start menu shortcut behind.
+  - To recover, install the same `.msi` file again, then uninstall it; that removed everything in testing.
+- Uninstalling removes the "Start with Windows" entry only when it points at the installed copy, so a portable copy's autostart is left alone.
 - The MSI is built with WiX Toolset v3. WiX v4/v5 use a different command line and are not supported by `packaging/make_installer.cmake`.
 
 ## Assets

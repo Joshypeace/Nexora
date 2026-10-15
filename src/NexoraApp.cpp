@@ -23,7 +23,15 @@ NexoraApp::NexoraApp()
     m_window->setDimDesktop(m_settings.dimDesktop());
     m_window->setHiddenIds(m_settings.hiddenApps());
 
-    connect(&m_discovery, &DiscoveryService::appsChanged, this, [this] { m_window->setApps(m_discovery.apps()); });
+    connect(&m_discovery, &DiscoveryService::appsChanged, this, [this] {
+        m_window->setApps(m_discovery.apps());
+        QStringList paths;
+        for (const AppEntry& app : m_discovery.apps()) {
+            if (app.kind != AppKind::Packaged)
+                paths << app.target << app.resolvedPath;
+        }
+        m_watcher.setKnownPaths(paths);
+    });
     connect(&m_discovery, &DiscoveryService::iconsLoaded, m_window.get(), &LauncherWindow::updateIcons);
     connect(&m_discovery, &DiscoveryService::busyChanged, m_window.get(), &LauncherWindow::setBusy);
 
