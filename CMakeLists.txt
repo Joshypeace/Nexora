@@ -104,3 +104,38 @@ if(WINDEPLOYQT_EXECUTABLE)
 endif()
 
 install(TARGETS Nexora RUNTIME DESTINATION .)
+
+# Distribution packages, written to dist/: a portable zip and a per-user MSI (WiX v3).
+set(NEXORA_PACKAGE_DIR "${CMAKE_SOURCE_DIR}/dist")
+
+if(TARGET deploy)
+    add_custom_target(portable
+        COMMAND "${CMAKE_COMMAND}" -E tar cf "${NEXORA_PACKAGE_DIR}/Nexora-${PROJECT_VERSION}-portable-x64.zip"
+                --format=zip Nexora
+        WORKING_DIRECTORY "${NEXORA_PACKAGE_DIR}"
+        DEPENDS deploy
+        COMMENT "Creating the portable zip"
+        VERBATIM)
+endif()
+
+find_program(WIX_CANDLE_EXECUTABLE candle
+    HINTS "$ENV{WIX}/bin" "C:/Program Files (x86)/WiX Toolset v3.14/bin" "C:/Program Files (x86)/WiX Toolset v3.11/bin")
+
+if(TARGET deploy AND WIX_CANDLE_EXECUTABLE)
+    get_filename_component(_wix_bin "${WIX_CANDLE_EXECUTABLE}" DIRECTORY)
+    add_custom_target(installer
+        COMMAND "${CMAKE_COMMAND}"
+                -DDIST_DIR=${NEXORA_DIST_DIR}
+                -DOUT_DIR=${CMAKE_BINARY_DIR}/installer
+                -DVERSION=${PROJECT_VERSION}
+                -DWIX_BIN=${_wix_bin}
+                -DICON=${CMAKE_SOURCE_DIR}/resources/nexora.ico
+                -P "${CMAKE_SOURCE_DIR}/packaging/make_installer.cmake"
+        COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_BINARY_DIR}/installer/Nexora-${PROJECT_VERSION}-x64.msi"
+                "${NEXORA_PACKAGE_DIR}"
+        DEPENDS deploy
+        COMMENT "Building the per-user MSI installer"
+        VERBATIM)
+else()
+    message(STATUS "WiX Toolset v3 not found; the 'installer' target is unavailable")
+endif()
