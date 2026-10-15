@@ -22,8 +22,6 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
-#include <windows.h>
-
 #include <memory>
 
 class UiTest : public QObject {
@@ -89,6 +87,7 @@ private:
     std::unique_ptr<LauncherWindow> m_window;
     QLineEdit* m_search = nullptr;
     QListView* m_view = nullptr;
+    bool m_lostActivationWhileVisible = false;
 
 private slots:
     void initTestCase()
@@ -108,6 +107,13 @@ private slots:
             apps.push_back(app(names[i], QColor::fromHsv(int(i * 360 / names.size()), 160, 230)));
         m_window->setApps(apps);
 
+        // Order of events tells outside interference apart from self-dismissal: only the
+        // former makes the application inactive while the launcher is still visible.
+        connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+            if (state != Qt::ApplicationActive && m_window && m_window->isVisible())
+                m_lostActivationWhileVisible = true;
+        });
+
         m_window->summon();
         QVERIFY(QTest::qWaitForWindowExposed(m_window.get()));
         QTest::qWait(300); // reveal animation
@@ -123,11 +129,10 @@ private slots:
     {
         if (qstrcmp(QTest::currentTestFunction(), "escapeDismisses") == 0 || m_window->isVisible())
             return;
-        // Skip only when another application really took the foreground (developer input
-        // during the run); a launcher that dismissed itself is a bug and must fail.
-        DWORD foregroundProcess = 0;
-        GetWindowThreadProcessId(GetForegroundWindow(), &foregroundProcess);
-        if (foregroundProcess != GetCurrentProcessId())
+        // Skip only when the application lost activation while the launcher was still
+        // showing (developer input during the run, which dismisses it by design). A
+        // launcher that hid itself first is a bug and must fail.
+        if (m_lostActivationWhileVisible)
             QSKIP("another application took the foreground during the run");
         QFAIL("the launcher was dismissed unexpectedly");
     }

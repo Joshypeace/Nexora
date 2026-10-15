@@ -168,6 +168,10 @@ On start the cached list appears immediately, and a fresh scan runs in the backg
 - *Run as administrator* and *Open file location* are not offered for packaged apps, and *Run as administrator* is not offered for `.url` or ClickOnce entries.
 - Apps installed only through the uninstall registry, with no Start menu shortcut, are picked up on the next stale or manual refresh. The registry is not watched.
 - The MSI and the executable are not code-signed. Signing needs a code-signing certificate (`signtool` from the Windows SDK can apply one).
+- **An uninstall that fails or is cancelled part-way** is rolled back. Nexora keeps working and your "Start with Windows" setting is restored.
+  - Windows Installer's own rollback of a per-user uninstall is incomplete. Verified with a package stripped of every custom action, so this is not specific to Nexora's package.
+  - Afterwards the product can't be repaired, and the next uninstall leaves the files and Start menu shortcut behind.
+  - To recover, install the same `.msi` file again, then uninstall it; that removes everything.
 - The MSI is built with WiX Toolset v3. WiX v4/v5 use a different command line and are not supported by `packaging/make_installer.cmake`.
 
 ## Assets
