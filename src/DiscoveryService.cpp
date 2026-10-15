@@ -44,36 +44,34 @@ void DiscoveryService::refresh(const AppDiscovery::Options& options, bool reload
     if (m_worker.joinable())
         m_worker.join();
 
-    // Without cached entries every icon is extracted again.
     QHash<QString, AppEntry> cached;
-    if (!reloadIcons) {
-        for (const AppEntry& app : m_apps)
-            cached.insert(app.id, app);
-    }
+    for (const AppEntry& app : m_apps)
+        cached.insert(app.id, app);
 
     setBusy(true);
-    m_worker = std::jthread([this, options, cached = std::move(cached)](std::stop_token stop) mutable {
-        run(stop, std::move(options), std::move(cached));
+    m_worker = std::jthread([this, options, cached = std::move(cached), reloadIcons](std::stop_token stop) mutable {
+        run(stop, std::move(options), std::move(cached), reloadIcons);
     });
 }
 
-void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, QHash<QString, AppEntry> cached)
+void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, QHash<QString, AppEntry> cached,
+                           bool reloadIcons)
 {
     const ComApartment com;
 
     std::vector<AppEntry> entries = AppDiscovery::discover(options, stop);
 
-    // Reuse cached icons whose source has not changed.
+    // Reuse cached icons whose source has not changed. When reloading, the cached icon is
+    // still shown until its replacement arrives, so the grid never blanks out.
     std::vector<size_t> missing;
     for (size_t i = 0; i < entries.size(); ++i) {
         AppEntry& entry = entries[i];
         const auto it = cached.constFind(entry.id);
-        if (it != cached.constEnd() && !it->icon.isNull() && it->iconKey == entry.iconKey
-            && it->iconStamp == entry.iconStamp) {
+        const bool hasCached = it != cached.constEnd() && !it->icon.isNull();
+        if (hasCached)
             entry.icon = it->icon;
-        } else {
+        if (!hasCached || reloadIcons || it->iconKey != entry.iconKey || it->iconStamp != entry.iconStamp)
             missing.push_back(i);
-        }
     }
 
     if (stop.stop_requested())
@@ -87,7 +85,10 @@ void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, 
         if (stop.stop_requested())
             return;
         AppEntry& entry = entries[index];
-        entry.icon = AppDiscovery::extractIcon(entry.iconKey, kIconSize);
+        const QImage icon = AppDiscovery::extractIcon(entry.iconKey, kIconSize);
+        if (icon.isNull() && !entry.icon.isNull())
+            continue; // keep the previous icon rather than blanking it
+        entry.icon = icon;
         batch.insert(entry.id, entry.icon);
         if (batch.size() >= kIconBatchSize) {
             QMetaObject::invokeMethod(this, [this, batch] { applyIcons(batch); }, Qt::QueuedConnection);

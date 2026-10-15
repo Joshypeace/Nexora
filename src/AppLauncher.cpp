@@ -78,8 +78,17 @@ AppLauncher::Result activatePackagedApp(const QString& aumid)
 
 namespace AppLauncher {
 
+bool canElevate(const AppEntry& app)
+{
+    if (app.kind == AppKind::Packaged)
+        return false;
+    const QString suffix = QFileInfo(app.target).suffix().toLower();
+    return suffix != u"url" && suffix != u"appref-ms";
+}
+
 Result launch(const AppEntry& app, bool elevated)
 {
+    elevated = elevated && canElevate(app);
     switch (app.kind) {
     case AppKind::Packaged:
         return activatePackagedApp(app.target);

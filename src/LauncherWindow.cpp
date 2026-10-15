@@ -10,7 +10,6 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCursor>
-#include <QFileInfo>
 #include <QFileDialog>
 #include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
@@ -535,12 +534,10 @@ void LauncherWindow::showItemMenu(const QPoint& position)
     // Copy: a background refresh may replace the model while the menu is open.
     const AppEntry app = *entry;
     const bool packaged = app.kind == AppKind::Packaged;
-    const QString suffix = QFileInfo(app.target).suffix().toLower();
-    const bool canElevate = !packaged && suffix != u"url" && suffix != u"appref-ms";
 
     QMenu* menu = createMenu(this);
     menu->addAction(tr("Open"), this, [this, app] { launchEntry(app, false); });
-    if (canElevate)
+    if (AppLauncher::canElevate(app))
         menu->addAction(tr("Run as administrator"), this, [this, app] { launchEntry(app, true); });
     if (!packaged) {
         menu->addAction(tr("Open file location"), this, [this, app] {
@@ -570,8 +567,7 @@ void LauncherWindow::browseForApplication()
         this, tr("Add application"), QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
         tr("Applications and shortcuts (*.exe *.lnk *.url *.appref-ms *.bat *.cmd);;All files (*)"));
     --m_modalDepth;
-    activateWindow();
-    m_search->setFocus();
+    restoreAfterDialog();
     if (!path.isEmpty())
         emit addApplicationRequested(path);
 }
@@ -581,10 +577,18 @@ void LauncherWindow::browseForFolder()
     ++m_modalDepth;
     const QString path = QFileDialog::getExistingDirectory(this, tr("Add a folder of portable applications"));
     --m_modalDepth;
-    activateWindow();
-    m_search->setFocus();
+    restoreAfterDialog();
     if (!path.isEmpty())
         emit addFolderRequested(path);
+}
+
+void LauncherWindow::restoreAfterDialog()
+{
+    activateWindow();
+    m_search->setFocus();
+    // If the user switched to another app meanwhile, the foreground lock can refuse
+    // re-activation; then no deactivation event will follow, so check explicitly.
+    dismissIfInactive(200);
 }
 
 // ---------------------------------------------------------------------------
@@ -664,9 +668,14 @@ void LauncherWindow::changeEvent(QEvent* event)
     if (event->type() != QEvent::ActivationChange || isActiveWindow() || !isVisible())
         return;
 
-    // Clicking another application dismisses the launcher; deferred so transient
-    // activation changes (popups, our own dialogs) settle first.
-    QTimer::singleShot(0, this, [this] {
+    // Clicking another application dismisses the launcher.
+    dismissIfInactive(0);
+}
+
+void LauncherWindow::dismissIfInactive(int delayMs)
+{
+    // Deferred so transient activation changes (popups, our own dialogs) settle first.
+    QTimer::singleShot(delayMs, this, [this] {
         if (isVisible() && !isActiveWindow() && m_modalDepth == 0 && !QApplication::activePopupWidget())
             dismiss();
     });

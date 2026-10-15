@@ -16,7 +16,11 @@ struct Result {
     QString error;
 };
 
+// Whether "Run as administrator" applies (not to packaged apps, .url or ClickOnce files).
+bool canElevate(const AppEntry& app);
+
 // Blocking launch; requires COM to be initialised on the calling thread.
+// `elevated` is ignored for entries where canElevate() is false.
 Result launch(const AppEntry& app, bool elevated = false);
 
 // Launches on a worker thread so slow starts (packaged app activation, UAC,

@@ -66,6 +66,8 @@ private:
     void launchEntry(const AppEntry& app, bool elevated);
     void showItemMenu(const QPoint& position);
     void showAddMenu(QWidget* anchor);
+    void restoreAfterDialog();
+    void dismissIfInactive(int delayMs);
     void updateGrid();
     void updateState();
     void playRevealAnimation();
