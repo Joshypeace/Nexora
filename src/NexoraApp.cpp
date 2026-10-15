@@ -8,6 +8,8 @@
 #include <QMenu>
 #include <QMessageBox>
 
+#include <windows.h>
+
 namespace {
 
 constexpr qint64 kStaleAfterSeconds = 10 * 60;
@@ -38,6 +40,19 @@ NexoraApp::NexoraApp()
     connect(&m_hotkey, &GlobalHotkey::activated, m_window.get(), &LauncherWindow::toggle);
     connect(&m_hotkey, &GlobalHotkey::activationRequested, m_window.get(), &LauncherWindow::summon);
 
+    // Installers add Start menu entries in bursts; rescan once things settle.
+    m_changeDebounce.setSingleShot(true);
+    m_changeDebounce.setInterval(2500);
+    connect(&m_changeDebounce, &QTimer::timeout, this, &NexoraApp::refresh);
+    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_changeDebounce, qOverload<>(&QTimer::start));
+    connect(&m_discovery, &DiscoveryService::busyChanged, this, [this](bool busy) {
+        if (busy)
+            return;
+        updateWatchedFolders(); // pick up newly created subfolders
+        if (!m_window->isVisible())
+            SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
+    });
+
     buildTrayMenu();
     m_tray.setIcon(QApplication::windowIcon());
     m_tray.setToolTip(QStringLiteral("Nexora"));
@@ -60,6 +75,8 @@ void NexoraApp::start(bool showLauncher)
 
     if (showLauncher)
         m_window->summon();
+    else
+        m_window->warmUp();
 }
 
 void NexoraApp::buildTrayMenu()
@@ -135,6 +152,16 @@ void NexoraApp::changeShortcut()
                          tr("%1 can't be used: it is invalid or already taken by another application.")
                              .arg(requested.toString(QKeySequence::NativeText)));
     applyHotkey(previous, false);
+}
+
+void NexoraApp::updateWatchedFolders()
+{
+    const QStringList current = m_watcher.directories();
+    if (!current.isEmpty())
+        m_watcher.removePaths(current);
+    const QStringList folders = AppDiscovery::watchedFolders(discoveryOptions());
+    if (!folders.isEmpty())
+        m_watcher.addPaths(folders);
 }
 
 AppDiscovery::Options NexoraApp::discoveryOptions() const

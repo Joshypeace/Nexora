@@ -44,6 +44,9 @@ std::vector<AppEntry> load()
         quint8 source = 0;
         in >> app.id >> app.name >> kind >> source >> app.target >> app.resolvedPath
            >> app.iconKey >> app.iconStamp >> app.icon;
+        // Reject corrupt records rather than producing out-of-range enum values.
+        if (kind > static_cast<quint8>(AppKind::Packaged) || source > static_cast<quint8>(AppSource::Registry))
+            return {};
         app.kind = static_cast<AppKind>(kind);
         app.source = static_cast<AppSource>(source);
         apps.push_back(std::move(app));

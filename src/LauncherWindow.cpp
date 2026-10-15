@@ -153,7 +153,6 @@ LauncherWindow::LauncherWindow(QWidget* parent)
     , m_model(new AppModel(this))
     , m_filter(new AppFilterModel(this))
     , m_delegate(new AppDelegate(this))
-    , m_overlay(std::make_unique<DimOverlay>())
     , m_background(QStringLiteral(":/background.jpg"))
 {
     setAttribute(Qt::WA_TranslucentBackground);
@@ -217,7 +216,6 @@ LauncherWindow::LauncherWindow(QWidget* parent)
     connect(m_search, &QLineEdit::textChanged, this, &LauncherWindow::onQueryChanged);
     connect(m_view, &QListView::clicked, this, [this](const QModelIndex& index) { launchIndex(index); });
     connect(m_view, &QListView::customContextMenuRequested, this, &LauncherWindow::showItemMenu);
-    connect(m_overlay.get(), &DimOverlay::clicked, this, &LauncherWindow::dismiss);
     connect(m_filter, &QAbstractItemModel::modelReset, this, &LauncherWindow::updateState);
     connect(m_filter, &QAbstractItemModel::layoutChanged, this, &LauncherWindow::updateState);
     connect(m_filter, &QAbstractItemModel::rowsInserted, this, &LauncherWindow::updateState);
@@ -345,7 +343,7 @@ void LauncherWindow::summon()
     move(topLeft);
 
     if (m_dimDesktop)
-        m_overlay->showOn(screen);
+        showOverlays();
 
     show();
     raise();
@@ -361,9 +359,49 @@ void LauncherWindow::dismiss()
     // Never hide the owner of an open file dialog.
     if (!isVisible() || m_modalDepth > 0)
         return;
-    m_overlay->fadeOut();
+    for (const auto& overlay : m_overlays)
+        overlay->fadeOut();
+    // Nexora idles in the tray between uses; hand unused pages back to Windows once the
+    // fade-out has finished. They are faulted back in transparently on the next show.
+    QTimer::singleShot(1000, this, [this] {
+        if (!isVisible())
+            SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
+    });
     hide();
     m_sinceDismiss.start();
+}
+
+void LauncherWindow::warmUp()
+{
+    // Render once off-screen so fonts, style polish, layouts and icon pixmaps are ready
+    // before the first hotkey press instead of being initialised while the user waits.
+    if (isVisible())
+        return;
+    grab();
+    ensureOverlays();
+    for (const auto& overlay : m_overlays)
+        overlay->winId();
+}
+
+void LauncherWindow::ensureOverlays()
+{
+    const auto count = static_cast<size_t>(QGuiApplication::screens().size());
+    while (m_overlays.size() < count) {
+        auto overlay = std::make_unique<DimOverlay>();
+        connect(overlay.get(), &DimOverlay::clicked, this, &LauncherWindow::dismiss);
+        m_overlays.push_back(std::move(overlay));
+    }
+    m_overlays.resize(count);
+}
+
+void LauncherWindow::showOverlays()
+{
+    // Dim (and catch clicks on) every monitor, so a click anywhere outside the
+    // launcher dismisses it instead of reaching the application underneath.
+    ensureOverlays();
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    for (qsizetype i = 0; i < screens.size(); ++i)
+        m_overlays[static_cast<size_t>(i)]->showOn(screens[i]);
 }
 
 void LauncherWindow::toggle()
@@ -462,8 +500,11 @@ void LauncherWindow::selectRow(int row)
 
 void LauncherWindow::updateGrid()
 {
-    // QListView wraps when a row fills the viewport exactly, so leave a little slack.
-    const int width = m_view->viewport()->width() - 2;
+    // QListView lays wrapped items out within the maximum viewport minus a scroll bar's
+    // extent (whether or not one is shown), and wraps when a row fills it exactly. Size the
+    // cells against that width so the column count doesn't change with the result count.
+    const int scrollBar = m_view->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_view);
+    const int width = m_view->maximumViewportSize().width() - scrollBar - 2;
     if (width <= 0)
         return;
     const int columns = std::max(1, width / AppDelegate::kCellSize.width());

@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <QStringDecoder>
 
 #include <QXmlStreamReader>
 
@@ -384,7 +385,13 @@ QString internetShortcutUrl(const QString& path)
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text) || file.size() > 64 * 1024)
         return {};
-    const QStringList lines = QString::fromLocal8Bit(file.readAll()).split(u'\n');
+    // Usually ASCII; prefer UTF-8 and fall back to the ANSI code page for legacy files.
+    const QByteArray bytes = file.readAll();
+    QStringDecoder utf8(QStringDecoder::Utf8);
+    QString text = utf8(bytes);
+    if (utf8.hasError())
+        text = QString::fromLocal8Bit(bytes);
+    const QStringList lines = text.split(u'\n');
     for (const QString& line : lines) {
         const QString trimmed = line.trimmed();
         if (trimmed.startsWith(QStringLiteral("URL="), Qt::CaseInsensitive))
@@ -648,6 +655,23 @@ void scanCustomFolder(const QString& folder, Collector& collector, const std::st
 } // namespace
 
 namespace AppDiscovery {
+
+QStringList watchedFolders(const Options& options)
+{
+    QStringList folders;
+    for (const QString& root : {knownFolderPath(FOLDERID_Programs), knownFolderPath(FOLDERID_CommonPrograms)}) {
+        if (root.isEmpty())
+            continue;
+        folders.append(root);
+        // A directory watch only reports its direct children, so add every subfolder too.
+        QDirIterator it(root, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (it.hasNext())
+            folders.append(it.next());
+    }
+    for (const QString& folder : options.customFolders)
+        folders.append(QDir::cleanPath(QDir::fromNativeSeparators(folder)));
+    return folders;
+}
 
 bool entryForFile(const QString& path, AppSource source, AppEntry& out)
 {

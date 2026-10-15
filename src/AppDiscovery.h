@@ -20,6 +20,9 @@ struct Options {
 // (with partial results) once `stop` is requested.
 std::vector<AppEntry> discover(const Options& options, const std::stop_token& stop);
 
+// Folders whose contents feed discovery (Start menu trees and custom folders), for change watching.
+QStringList watchedFolders(const Options& options);
+
 // Builds an entry for a single user-selected file (.lnk, .url, .appref-ms, .exe, ...).
 bool entryForFile(const QString& path, AppSource source, AppEntry& out);
 

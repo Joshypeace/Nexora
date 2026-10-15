@@ -16,8 +16,23 @@ set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets GuiPrivate)
 qt_standard_project_setup()
 
-qt_add_executable(Nexora WIN32
-    src/main.cpp
+option(NEXORA_BUILD_TESTS "Build the Nexora test suite" ON)
+
+# Compiler settings shared by the app, its core library and the tests.
+function(nexora_configure_target target)
+    target_compile_definitions(${target} PRIVATE
+        UNICODE _UNICODE
+        WIN32_LEAN_AND_MEAN NOMINMAX
+        _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A00000C
+        NEXORA_VERSION="${PROJECT_VERSION}"
+    )
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
+    endif()
+endfunction()
+
+# Everything except main(), so the test suite can link the real components.
+qt_add_library(NexoraCore STATIC
     src/AppEntry.h
     src/ComApartment.h
     src/AppCache.h            src/AppCache.cpp
@@ -34,11 +49,13 @@ qt_add_executable(Nexora WIN32
     src/LauncherWindow.h      src/LauncherWindow.cpp
     src/NexoraApp.h           src/NexoraApp.cpp
     src/ShortcutDialog.h      src/ShortcutDialog.cpp
-    resources/nexora.rc
-    resources/nexora.manifest
+    src/Theme.h               src/Theme.cpp
 )
+# INTERFACE only: on the library itself, src/ on the include path would make the
+# Windows SDK's <appmodel.h> resolve to our AppModel.h (case-insensitive filesystem).
+target_include_directories(NexoraCore INTERFACE src)
 
-qt_add_resources(Nexora "nexora_assets"
+qt_add_resources(NexoraCore "nexora_assets"
     PREFIX "/"
     BASE resources
     FILES
@@ -46,22 +63,25 @@ qt_add_resources(Nexora "nexora_assets"
         resources/background.jpg
 )
 
-target_compile_definitions(Nexora PRIVATE
-    UNICODE _UNICODE
-    WIN32_LEAN_AND_MEAN NOMINMAX
-    _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A00000C
-    NEXORA_VERSION="${PROJECT_VERSION}"
-)
-
-if(MSVC)
-    target_compile_options(Nexora PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
-endif()
-
-target_link_libraries(Nexora PRIVATE
+nexora_configure_target(NexoraCore)
+target_link_libraries(NexoraCore PUBLIC
     Qt6::Widgets
     Qt6::GuiPrivate
     dwmapi shell32 ole32 shlwapi version user32 uuid advapi32
 )
+
+qt_add_executable(Nexora WIN32
+    src/main.cpp
+    resources/nexora.rc
+    resources/nexora.manifest
+)
+nexora_configure_target(Nexora)
+target_link_libraries(Nexora PRIVATE NexoraCore)
+
+if(NEXORA_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # Gathers the Qt runtime next to the executable so it runs outside a Qt-enabled shell.
 get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
