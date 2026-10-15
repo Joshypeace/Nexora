@@ -620,14 +620,18 @@ void scanUninstallRegistry(Collector& collector, const std::stop_token& stop)
 void scanCustomFolder(const QString& folder, Collector& collector, const std::stop_token& stop)
 {
     constexpr int kMaxDepth = 2;
-    constexpr int kMaxVisited = 4000; // files and folders examined
+    constexpr int kMaxVisited = 4000; // candidate files and folders examined
 
     int visited = 0;
     std::vector<std::pair<QString, int>> pending{{QDir::cleanPath(QDir::fromNativeSeparators(folder)), 0}};
     for (size_t i = 0; i < pending.size(); ++i) {
         const auto [directory, depth] = pending[i]; // copy: `pending` grows below
+        // Name filters keep DLLs and data files out of the listing (and the cap); AllDirs ignores them.
+        QDir dir(directory);
+        dir.setNameFilters({QStringLiteral("*.exe"), QStringLiteral("*.lnk"), QStringLiteral("*.url"),
+                            QStringLiteral("*.appref-ms")});
         const QFileInfoList entries =
-            QDir(directory).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsLast);
+            dir.entryInfoList(QDir::Files | QDir::AllDirs | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsLast);
         for (const QFileInfo& info : entries) {
             if (stop.stop_requested() || ++visited > kMaxVisited)
                 return;

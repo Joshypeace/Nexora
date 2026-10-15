@@ -35,7 +35,7 @@ signals:
     void busyChanged(bool busy);
 
 private:
-    void run(std::stop_token stop, AppDiscovery::Options options, QHash<QString, AppEntry> cached);
+    void run(std::stop_token stop, AppDiscovery::Options options, QHash<QString, AppEntry> cached, bool reloadIcons);
     void applyEntries(std::vector<AppEntry> entries);
     void applyIcons(const QHash<QString, QImage>& icons);
     void finish();
