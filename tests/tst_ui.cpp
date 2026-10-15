@@ -22,6 +22,8 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <windows.h>
+
 #include <memory>
 
 class UiTest : public QObject {
@@ -119,8 +121,15 @@ private slots:
 
     void init()
     {
-        if (qstrcmp(QTest::currentTestFunction(), "escapeDismisses") != 0 && !m_window->isVisible())
-            QSKIP("the launcher was dismissed by an outside activation change (user input during the run?)");
+        if (qstrcmp(QTest::currentTestFunction(), "escapeDismisses") == 0 || m_window->isVisible())
+            return;
+        // Skip only when another application really took the foreground (developer input
+        // during the run); a launcher that dismissed itself is a bug and must fail.
+        DWORD foregroundProcess = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &foregroundProcess);
+        if (foregroundProcess != GetCurrentProcessId())
+            QSKIP("another application took the foreground during the run");
+        QFAIL("the launcher was dismissed unexpectedly");
     }
 
     void showsAllAppsSelectingTheFirst()

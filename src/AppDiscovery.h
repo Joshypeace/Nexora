@@ -20,8 +20,11 @@ struct Options {
 // (with partial results) once `stop` is requested.
 std::vector<AppEntry> discover(const Options& options, const std::stop_token& stop);
 
-// Roots of the folder trees that feed discovery (Start menu and custom folders), for change watching.
-QStringList watchedFolders(const Options& options);
+// Custom folders are scanned this many subfolder levels deep (0 = only the folder itself).
+constexpr int kCustomFolderDepth = 2;
+
+// The user's and all users' Start menu "Programs" folders, for change watching.
+QStringList startMenuFolders();
 
 // Builds an entry for a single user-selected file (.lnk, .url, .appref-ms, .exe, ...).
 bool entryForFile(const QString& path, AppSource source, AppEntry& out);

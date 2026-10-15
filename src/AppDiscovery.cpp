@@ -626,7 +626,7 @@ void scanUninstallRegistry(Collector& collector, const std::stop_token& stop)
 // following links, so even a drive root costs a bounded amount of work.
 void scanCustomFolder(const QString& folder, Collector& collector, const std::stop_token& stop)
 {
-    constexpr int kMaxDepth = 2;
+    constexpr int kMaxDepth = AppDiscovery::kCustomFolderDepth;
     constexpr int kMaxVisited = 4000; // candidate files and folders examined
 
     int visited = 0;
@@ -656,16 +656,13 @@ void scanCustomFolder(const QString& folder, Collector& collector, const std::st
 
 namespace AppDiscovery {
 
-QStringList watchedFolders(const Options& options)
+QStringList startMenuFolders()
 {
-    // Roots only: the watcher observes each tree recursively.
     QStringList folders;
     for (const QString& root : {knownFolderPath(FOLDERID_Programs), knownFolderPath(FOLDERID_CommonPrograms)}) {
         if (!root.isEmpty())
             folders.append(root);
     }
-    for (const QString& folder : options.customFolders)
-        folders.append(QDir::cleanPath(QDir::fromNativeSeparators(folder)));
     return folders;
 }
 

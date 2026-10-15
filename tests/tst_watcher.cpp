@@ -1,4 +1,5 @@
-// Folder watching: recursive detection, noise filtering, ignored paths, no locking.
+// Folder watching: recursive detection, noise filtering, depth limits, ignored paths,
+// no locking, and recovery of roots that appear later or are recreated.
 
 #include "FolderWatcher.h"
 
@@ -39,7 +40,9 @@ private slots:
         QDir(m_root.path()).mkpath(QStringLiteral("Tools/Editor"));
         QDir(m_root.path()).mkpath(QStringLiteral("data"));
         m_watcher = std::make_unique<FolderWatcher>();
-        m_watcher->setFolders({m_root.path()}, {m_root.filePath(QStringLiteral("data"))});
+        // Same depth rule as a custom folder: files at most two subfolders down.
+        m_watcher->setFolders({{m_root.path(), 3}}, {m_root.filePath(QStringLiteral("data"))});
+        QCOMPARE(m_watcher->activeCount(), 1);
     }
 
     void classifiesChanges()
@@ -48,12 +51,18 @@ private slots:
         QVERIFY(FolderWatcher::isRelevant(QStringLiteral("C:/x/App.lnk"), false));
         QVERIFY(FolderWatcher::isRelevant(QStringLiteral("C:/x/Game.url"), true));
         QVERIFY(!FolderWatcher::isRelevant(QStringLiteral("C:/x/log.txt"), true));
-        QVERIFY(!FolderWatcher::isRelevant(QDir::tempPath() + QStringLiteral("/nexora-exists-check.dll"), true));
-        // Removed paths can't be inspected, so they count.
-        QVERIFY(FolderWatcher::isRelevant(QStringLiteral("C:/does/not/exist.dat"), false));
+        // Vanished paths count only if they could have been a folder or an app.
+        QVERIFY(FolderWatcher::isRelevant(QStringLiteral("C:/does/not/exist"), false));
+        QVERIFY(FolderWatcher::isRelevant(QStringLiteral("C:/does/not/Old.exe"), false));
+        QVERIFY(!FolderWatcher::isRelevant(QStringLiteral("C:/does/not/exist.tmp"), false));
+        // Existing extension-less files (browser caches) are not folders.
+        const QString cacheFile = m_root.filePath(QStringLiteral("data/cachefile"));
+        write(cacheFile);
+        QVERIFY(!FolderWatcher::isRelevant(cacheFile, false));
+        QVERIFY(FolderWatcher::isRelevant(m_root.path(), false)); // an existing folder
     }
 
-    void detectsAppsDeepInTheTree()
+    void detectsAppsWithinTheScannedDepth()
     {
         QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
         write(m_root.filePath(QStringLiteral("Tools/Editor/Editor.exe")));
@@ -61,13 +70,23 @@ private slots:
         settle(spy);
     }
 
+    void ignoresChangesBelowTheScannedDepth()
+    {
+        QDir(m_root.path()).mkpath(QStringLiteral("Tools/Editor/plugins/deep"));
+        QTest::qWait(500); // the folder creation itself is within range; let it pass
+        QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
+        write(m_root.filePath(QStringLiteral("Tools/Editor/plugins/deep/Helper.exe")));
+        QVERIFY(!settle(spy));
+    }
+
     void ignoresUnrelatedWrites()
     {
         write(m_root.filePath(QStringLiteral("Tools/Editor/settings.json")));
+        QTest::qWait(300);
         QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
-        // Content writes to non-application files must not trigger rescans.
         write(m_root.filePath(QStringLiteral("Tools/Editor/settings.json")), "more");
-        write(m_root.filePath(QStringLiteral("Tools/Editor/settings.json")), "and more");
+        write(m_root.filePath(QStringLiteral("Tools/cache")), "blob");
+        QFile::remove(m_root.filePath(QStringLiteral("Tools/Editor/settings.json")));
         QVERIFY(!settle(spy));
     }
 
@@ -89,9 +108,36 @@ private slots:
         settle(spy);
     }
 
+    void recoversRootsThatAppearLater()
+    {
+        QTemporaryDir parent;
+        const QString later = parent.filePath(QStringLiteral("MountedLater"));
+        FolderWatcher watcher;
+        watcher.setRetryInterval(200);
+        watcher.setFolders({{later, -1}}, {});
+        QCOMPARE(watcher.activeCount(), 0);
+
+        QSignalSpy spy(&watcher, &FolderWatcher::changed);
+        QVERIFY(QDir().mkpath(later));
+        QVERIFY(spy.wait(3000)); // reported once the folder can be watched
+        QCOMPARE(watcher.activeCount(), 1);
+
+        // Deleting the root releases it, so a folder with the same name can be recreated
+        // and is then watched again.
+        spy.clear();
+        QVERIFY(QDir(later).removeRecursively());
+        QTRY_VERIFY_WITH_TIMEOUT(watcher.activeCount() == 0 || !spy.isEmpty(), 3000);
+        QVERIFY(QDir().mkpath(later));
+        QTRY_COMPARE_WITH_TIMEOUT(watcher.activeCount(), 1, 3000);
+        spy.clear();
+        write(later + QStringLiteral("/New.exe"));
+        QVERIFY(spy.wait(3000));
+    }
+
     void stopsWatchingWhenCleared()
     {
         m_watcher->setFolders({}, {});
+        QCOMPARE(m_watcher->activeCount(), 0);
         QSignalSpy spy(m_watcher.get(), &FolderWatcher::changed);
         write(m_root.filePath(QStringLiteral("Later.exe")));
         QVERIFY(!settle(spy));
