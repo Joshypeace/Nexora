@@ -86,8 +86,12 @@ void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, 
             return;
         AppEntry& entry = entries[index];
         const QImage icon = AppDiscovery::extractIcon(entry.iconKey, kIconSize);
-        if (icon.isNull() && !entry.icon.isNull())
-            continue; // keep the previous icon rather than blanking it
+        if (icon.isNull() && !entry.icon.isNull()) {
+            // Keep the previous icon rather than blanking it, but clear the stamp so the
+            // next scan retries (the source may have been locked mid-update).
+            entry.iconStamp = 0;
+            continue;
+        }
         entry.icon = icon;
         batch.insert(entry.id, entry.icon);
         if (batch.size() >= kIconBatchSize) {
