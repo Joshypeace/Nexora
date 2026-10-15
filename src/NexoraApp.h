@@ -28,6 +28,7 @@ private:
     void applyHotkey(const QKeySequence& sequence, bool notifyOnFailure);
     void changeShortcut();
     void refresh();
+    void refreshWithIcons();
     void refreshIfStale();
     void addApplication(const QString& path);
     void addFolder(const QString& path);

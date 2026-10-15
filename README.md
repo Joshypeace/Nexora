@@ -87,12 +87,16 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 **Discovery sources**, in priority order for deduplication:
 
 1. Manually added `.exe`/`.lnk` files
-2. User-selected folders (scanned two levels deep)
-3. Start menu shortcuts for the current user and all users. Shortcuts are resolved with `IShellLink`, so arguments are preserved. Uninstallers, readmes, broken links and non-programs are skipped.
+2. User-selected folders: the folder plus two levels of subfolders, breadth-first, without following links, capped at 4,000 entries
+3. Start menu shortcuts for the current user and all users:
+   - `.lnk` shortcuts are resolved with `IShellLink`, so arguments are preserved.
+   - `.url` files are included when they use an app protocol (Steam, Epic, …) rather than a web link.
+   - ClickOnce `.appref-ms` files are included.
+   - Uninstallers, readmes, broken links and non-programs are skipped.
 4. Packaged / Microsoft Store apps from the shell Apps folder (AUMIDs). Logos are read from each package's manifest, using the same unplated asset Start uses.
 5. Uninstall registry entries (HKCU and HKLM, 64- and 32-bit). An entry is used only if its `DisplayIcon` points to a real program and it isn't already listed.
 
-Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never recurses through drives and never runs anything. On start the cached list appears immediately, and a fresh scan runs in the background. Opening the launcher triggers another scan once the data is older than 10 minutes; `+` → *Refresh applications* rescans at any time. Icon extraction runs only for new or changed entries. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
+Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never crawls whole drives and never runs anything; scans stop promptly when Nexora quits. On start the cached list appears immediately, and a fresh scan runs in the background. Opening the launcher triggers another scan once the data is older than 10 minutes. Background scans re-extract icons only for new entries, or when a shortcut or the program it points to has changed. `+` → *Refresh applications* rescans and re-extracts every icon. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
 
 **Frosted glass:** the launcher is a regular (non-layered) top-level window. Its native frame is folded into the client area with Qt's `QWindowsWindow::setCustomMargins`, so DWM still provides the shadow, Windows 11 rounded corners, open/close transitions and the `DWMSBT_TRANSIENTWINDOW` acrylic backdrop. The background artwork is painted over it at partial opacity under a dark navy overlay, so the blurred desktop shows through.
 
@@ -100,11 +104,11 @@ Entries are deduplicated by target executable plus arguments, and by name for th
 
 - **Qt private API.** `setCustomMargins` lives in `Qt6::GuiPrivate`. It is stable in practice but not covered by Qt's compatibility promise, so it may need a touch-up on future Qt versions.
 - **Windows 10** falls back to the legacy acrylic accent (`SetWindowCompositionAttribute`) and has square corners. This path compiles but has only been tested on Windows 11. If no blur is available at all, an opaque gradient is painted instead.
-- **Ctrl+Space** is also used by some input-method editors (e.g. Chinese IMEs). If registration fails, Nexora shows a tray notification; pick another shortcut from the tray menu.
+- **Ctrl+Space** is also used by some input-method editors (e.g. Chinese IMEs). If registration fails, Nexora shows a tray notification; pick another shortcut from the tray menu. A shortcut must include Ctrl, Alt or Win, since a global hotkey takes its key away from every other app. Keys that only exist on non-Latin keyboard layouts may be rejected.
 - The desktop is dimmed only on the monitor where the launcher opens. Clicking another monitor still dismisses the launcher, but that click also reaches the window under it.
 - New Start menu entries are not watched live. They appear on the next stale refresh (10 minutes) or after *Refresh applications*.
 - Registry discovery is heuristic. Occasional helper programs can slip through; hide them with a right-click.
-- *Run as administrator* and *Open file location* are not offered for packaged apps.
+- *Run as administrator* and *Open file location* are not offered for packaged apps, and *Run as administrator* is not offered for `.url` or ClickOnce entries.
 - Memory use is around 110 MB, mostly from shell extensions the icon APIs load into the process.
 - There is no installer. `dist\Nexora` is a portable folder.
 

@@ -10,6 +10,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCursor>
+#include <QFileInfo>
 #include <QFileDialog>
 #include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
@@ -358,7 +359,8 @@ void LauncherWindow::summon()
 
 void LauncherWindow::dismiss()
 {
-    if (!isVisible())
+    // Never hide the owner of an open file dialog.
+    if (!isVisible() || m_modalDepth > 0)
         return;
     m_overlay->fadeOut();
     hide();
@@ -367,15 +369,19 @@ void LauncherWindow::dismiss()
 
 void LauncherWindow::toggle()
 {
-    if (isVisible()) {
+    if (isVisible())
         dismiss();
-        return;
-    }
+    else
+        summon();
+}
+
+void LauncherWindow::toggleFromTray()
+{
     // Clicking the tray icon first deactivates (and so dismisses) the launcher;
     // don't immediately bring it back in that case.
-    if (m_sinceDismiss.isValid() && m_sinceDismiss.elapsed() < 300)
+    if (!isVisible() && m_sinceDismiss.isValid() && m_sinceDismiss.elapsed() < 300)
         return;
-    summon();
+    toggle();
 }
 
 void LauncherWindow::playRevealAnimation()
@@ -529,11 +535,14 @@ void LauncherWindow::showItemMenu(const QPoint& position)
     // Copy: a background refresh may replace the model while the menu is open.
     const AppEntry app = *entry;
     const bool packaged = app.kind == AppKind::Packaged;
+    const QString suffix = QFileInfo(app.target).suffix().toLower();
+    const bool canElevate = !packaged && suffix != u"url" && suffix != u"appref-ms";
 
     QMenu* menu = createMenu(this);
     menu->addAction(tr("Open"), this, [this, app] { launchEntry(app, false); });
-    if (!packaged) {
+    if (canElevate)
         menu->addAction(tr("Run as administrator"), this, [this, app] { launchEntry(app, true); });
+    if (!packaged) {
         menu->addAction(tr("Open file location"), this, [this, app] {
             if (AppLauncher::revealInExplorer(app))
                 dismiss();
@@ -559,7 +568,7 @@ void LauncherWindow::browseForApplication()
     ++m_modalDepth;
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Add application"), QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
-        tr("Applications and shortcuts (*.exe *.lnk *.bat *.cmd);;All files (*)"));
+        tr("Applications and shortcuts (*.exe *.lnk *.url *.appref-ms *.bat *.cmd);;All files (*)"));
     --m_modalDepth;
     activateWindow();
     m_search->setFocus();

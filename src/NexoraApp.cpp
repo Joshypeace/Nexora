@@ -26,7 +26,7 @@ NexoraApp::NexoraApp()
     connect(&m_discovery, &DiscoveryService::busyChanged, m_window.get(), &LauncherWindow::setBusy);
 
     connect(m_window.get(), &LauncherWindow::shown, this, &NexoraApp::refreshIfStale);
-    connect(m_window.get(), &LauncherWindow::refreshRequested, this, &NexoraApp::refresh);
+    connect(m_window.get(), &LauncherWindow::refreshRequested, this, &NexoraApp::refreshWithIcons);
     connect(m_window.get(), &LauncherWindow::addApplicationRequested, this, &NexoraApp::addApplication);
     connect(m_window.get(), &LauncherWindow::addFolderRequested, this, &NexoraApp::addFolder);
     connect(m_window.get(), &LauncherWindow::hideRequested, this, &NexoraApp::hideApplication);
@@ -44,7 +44,7 @@ NexoraApp::NexoraApp()
     m_tray.setContextMenu(m_trayMenu.get());
     connect(&m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger)
-            m_window->toggle();
+            m_window->toggleFromTray();
     });
 }
 
@@ -75,7 +75,7 @@ void NexoraApp::buildTrayMenu()
         m_window->summon();
         m_window->browseForFolder();
     });
-    menu->addAction(tr("Refresh applications"), this, &NexoraApp::refresh);
+    menu->addAction(tr("Refresh applications"), this, &NexoraApp::refreshWithIcons);
     m_restoreHiddenAction = menu->addAction(tr("Show hidden applications"), this, &NexoraApp::restoreHiddenApplications);
     m_restoreHiddenAction->setEnabled(!m_settings.hiddenApps().isEmpty());
     menu->addSeparator();
@@ -114,11 +114,16 @@ void NexoraApp::applyHotkey(const QKeySequence& sequence, bool notifyOnFailure)
 void NexoraApp::changeShortcut()
 {
     m_window->dismiss();
-    ShortcutDialog dialog(m_hotkey.shortcut());
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-
     const QKeySequence previous = m_hotkey.shortcut();
+
+    // Release the current hotkey so the dialog can capture it (e.g. to re-enter Ctrl+Space).
+    m_hotkey.setShortcut({});
+    ShortcutDialog dialog(previous);
+    if (dialog.exec() != QDialog::Accepted) {
+        applyHotkey(previous, false);
+        return;
+    }
+
     const QKeySequence requested = dialog.sequence();
     if (m_hotkey.setShortcut(requested)) {
         m_settings.setHotkey(requested.toString(QKeySequence::PortableText));
@@ -140,6 +145,11 @@ AppDiscovery::Options NexoraApp::discoveryOptions() const
 void NexoraApp::refresh()
 {
     m_discovery.refresh(discoveryOptions());
+}
+
+void NexoraApp::refreshWithIcons()
+{
+    m_discovery.refresh(discoveryOptions(), true);
 }
 
 void NexoraApp::refreshIfStale()

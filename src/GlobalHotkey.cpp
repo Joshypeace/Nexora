@@ -13,8 +13,20 @@ UINT activationMessage()
     return message;
 }
 
-std::optional<UINT> virtualKey(Qt::Key key)
+std::optional<UINT> virtualKey(Qt::Key key, Qt::KeyboardModifiers modifiers)
 {
+    if (modifiers.testFlag(Qt::KeypadModifier)) {
+        if (key >= Qt::Key_0 && key <= Qt::Key_9)
+            return static_cast<UINT>(VK_NUMPAD0 + (key - Qt::Key_0));
+        switch (key) {
+        case Qt::Key_Asterisk: return VK_MULTIPLY;
+        case Qt::Key_Plus: return VK_ADD;
+        case Qt::Key_Minus: return VK_SUBTRACT;
+        case Qt::Key_Period: return VK_DECIMAL;
+        case Qt::Key_Slash: return VK_DIVIDE;
+        default: break;
+        }
+    }
     if (key >= Qt::Key_A && key <= Qt::Key_Z)
         return static_cast<UINT>('A' + (key - Qt::Key_A));
     if (key >= Qt::Key_0 && key <= Qt::Key_9)
@@ -87,15 +99,12 @@ bool GlobalHotkey::setShortcut(const QKeySequence& sequence)
 {
     unregister();
     m_sequence = {};
-    if (!m_window || sequence.isEmpty())
+    if (!m_window || !isAcceptable(sequence))
         return false;
 
     const QKeyCombination combination = sequence[0];
-    const std::optional<UINT> key = virtualKey(combination.key());
-    if (!key)
-        return false;
-
     const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers();
+    const std::optional<UINT> key = virtualKey(combination.key(), modifiers);
     UINT nativeModifiers = MOD_NOREPEAT;
     if (modifiers.testFlag(Qt::ControlModifier))
         nativeModifiers |= MOD_CONTROL;
@@ -110,6 +119,22 @@ bool GlobalHotkey::setShortcut(const QKeySequence& sequence)
     if (m_registered)
         m_sequence = sequence;
     return m_registered;
+}
+
+bool GlobalHotkey::isAcceptable(const QKeySequence& sequence)
+{
+    if (sequence.count() != 1)
+        return false;
+    const QKeyCombination combination = sequence[0];
+    const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers();
+    if (!virtualKey(combination.key(), modifiers))
+        return false;
+
+    // A global hotkey swallows its key system-wide, so plain keys (or Shift+key, which is
+    // ordinary typing) are refused. F13-F24 do not exist on most keyboards and are fine alone.
+    const bool hasModifier = modifiers.testAnyFlags(Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+    const bool spareFunctionKey = combination.key() >= Qt::Key_F13 && combination.key() <= Qt::Key_F24;
+    return hasModifier || spareFunctionKey;
 }
 
 bool GlobalHotkey::signalRunningInstance()

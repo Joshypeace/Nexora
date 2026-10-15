@@ -2,6 +2,7 @@
 
 #include "ComApartment.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -40,7 +41,8 @@ AppLauncher::Result shellExecute(const QString& file, const QString& directory, 
 
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof(info);
-    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_LOG_USAGE;
+    // NO_UI: failures are reported once, through Nexora's tray notification. UAC still prompts.
+    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_LOG_USAGE | SEE_MASK_FLAG_NO_UI;
     info.lpVerb = elevated ? L"runas" : nullptr;
     info.lpFile = nativeFile.c_str();
     info.lpDirectory = nativeDirectory.empty() ? nullptr : nativeDirectory.c_str();
@@ -95,12 +97,19 @@ void launchAsync(const AppEntry& app, bool elevated, QObject* context, std::func
     // Nexora hides as soon as the launch starts; let the new application take the foreground.
     AllowSetForegroundWindow(ASFW_ANY);
 
+    // QPointer may only be dereferenced on its object's thread, so the result is posted
+    // to the application object and `context` is checked there.
     QThreadPool::globalInstance()->start([app, elevated, context = QPointer<QObject>(context),
-                                          onFinished = std::move(onFinished)] {
+                                          onFinished = std::move(onFinished)]() mutable {
         const ComApartment com;
         const Result result = launch(app, elevated);
-        if (context)
-            QMetaObject::invokeMethod(context, [onFinished, result] { onFinished(result); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [context = std::move(context), onFinished = std::move(onFinished), result] {
+                if (context)
+                    onFinished(result);
+            },
+            Qt::QueuedConnection);
     });
 }
 
