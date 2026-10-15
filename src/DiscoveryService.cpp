@@ -101,6 +101,8 @@ void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, 
     }
 
     AppCache::save(entries);
+    // Icon extraction loads shell extension DLLs into this thread's apartment; release them.
+    CoFreeUnusedLibrariesEx(0, 0);
     QMetaObject::invokeMethod(this, [this, batch] { applyIcons(batch); finish(); }, Qt::QueuedConnection);
 }
 

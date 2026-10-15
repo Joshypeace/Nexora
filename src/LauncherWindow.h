@@ -32,6 +32,7 @@ public:
     void dismiss();
     void toggle();
     void toggleFromTray();
+    void warmUp();
 
     void setApps(const std::vector<AppEntry>& apps);
     void updateIcons(const QHash<QString, QImage>& icons);
@@ -67,6 +68,8 @@ private:
     void showItemMenu(const QPoint& position);
     void showAddMenu(QWidget* anchor);
     void restoreAfterDialog();
+    void ensureOverlays();
+    void showOverlays();
     void dismissIfInactive(int delayMs);
     void updateGrid();
     void updateState();
@@ -75,7 +78,7 @@ private:
     AppModel* m_model;
     AppFilterModel* m_filter;
     AppDelegate* m_delegate;
-    std::unique_ptr<DimOverlay> m_overlay;
+    std::vector<std::unique_ptr<DimOverlay>> m_overlays; // one per monitor
 
     QWidget* m_content = nullptr;
     QLineEdit* m_search = nullptr;

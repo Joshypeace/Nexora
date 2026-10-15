@@ -24,8 +24,11 @@ Settings::Settings()
 
 QString Settings::dataDirectory()
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/Nexora");
+    // NEXORA_DATA_DIR lets the test suite (or a portable setup) keep settings and cache elsewhere.
+    const QString overridden = qEnvironmentVariable("NEXORA_DATA_DIR");
+    const QString dir = !overridden.isEmpty()
+        ? overridden
+        : QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Nexora");
     QDir().mkpath(dir);
     return dir;
 }
