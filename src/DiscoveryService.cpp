@@ -32,10 +32,11 @@ void DiscoveryService::loadCache()
     emit appsChanged();
 }
 
-void DiscoveryService::refresh(const AppDiscovery::Options& options)
+void DiscoveryService::refresh(const AppDiscovery::Options& options, bool reloadIcons)
 {
     if (m_busy) {
         m_refreshQueued = true;
+        m_queuedReloadIcons = m_queuedReloadIcons || reloadIcons;
         m_queuedOptions = options;
         return;
     }
@@ -43,9 +44,12 @@ void DiscoveryService::refresh(const AppDiscovery::Options& options)
     if (m_worker.joinable())
         m_worker.join();
 
+    // Without cached entries every icon is extracted again.
     QHash<QString, AppEntry> cached;
-    for (const AppEntry& app : m_apps)
-        cached.insert(app.id, app);
+    if (!reloadIcons) {
+        for (const AppEntry& app : m_apps)
+            cached.insert(app.id, app);
+    }
 
     setBusy(true);
     m_worker = std::jthread([this, options, cached = std::move(cached)](std::stop_token stop) mutable {
@@ -57,7 +61,7 @@ void DiscoveryService::run(std::stop_token stop, AppDiscovery::Options options, 
 {
     const ComApartment com;
 
-    std::vector<AppEntry> entries = AppDiscovery::discover(options);
+    std::vector<AppEntry> entries = AppDiscovery::discover(options, stop);
 
     // Reuse cached icons whose source has not changed.
     std::vector<size_t> missing;
@@ -119,8 +123,10 @@ void DiscoveryService::finish()
     setBusy(false);
 
     if (m_refreshQueued) {
+        const bool reloadIcons = m_queuedReloadIcons;
         m_refreshQueued = false;
-        refresh(m_queuedOptions);
+        m_queuedReloadIcons = false;
+        refresh(m_queuedOptions, reloadIcons);
     }
 }
 

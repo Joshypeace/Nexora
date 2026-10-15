@@ -373,7 +373,57 @@ std::optional<AppEntry> shortcutEntry(const QString& lnkPath, AppSource source, 
         ? QStringLiteral("lnk:") + nameKey(name)
         : QStringLiteral("app:") + pathKey(link->path) + u'|' + link->arguments.simplified().toLower();
     entry.iconKey = entry.target;
-    entry.iconStamp = modificationStamp(lnkPath);
+    // Program updates usually replace the executable but leave the shortcut untouched.
+    entry.iconStamp = std::max(modificationStamp(lnkPath), link->path.isEmpty() ? 0 : modificationStamp(link->path));
+    return entry;
+}
+
+// Reads the URL of an Internet Shortcut (.url) file.
+QString internetShortcutUrl(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text) || file.size() > 64 * 1024)
+        return {};
+    const QStringList lines = QString::fromLocal8Bit(file.readAll()).split(u'\n');
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(QStringLiteral("URL="), Qt::CaseInsensitive))
+            return trimmed.mid(4);
+    }
+    return {};
+}
+
+// Start menu .url files launching an application protocol (steam://, com.epicgames.launcher://, ...)
+// and ClickOnce .appref-ms files. Both are started by the shell through the file itself.
+std::optional<AppEntry> shellFileEntry(const QFileInfo& info, AppSource source, bool filterNoise)
+{
+    QString name = shellDisplayName(info.absoluteFilePath());
+    if (name.isEmpty())
+        name = info.completeBaseName();
+    if (filterNoise && isNoiseName(name))
+        return std::nullopt;
+
+    QString id = QStringLiteral("lnk:") + nameKey(name);
+    if (info.suffix().compare(QStringLiteral("url"), Qt::CaseInsensitive) == 0) {
+        const QString url = internetShortcutUrl(info.absoluteFilePath());
+        const QString scheme = url.section(u':', 0, 0).toLower();
+        // Web links in the Start menu are "visit our website" entries, not applications.
+        static const QSet<QString> kWebSchemes = {QStringLiteral("http"), QStringLiteral("https"),
+                                                  QStringLiteral("ftp"), QStringLiteral("file"),
+                                                  QStringLiteral("mailto")};
+        if (url.isEmpty() || !url.contains(u':') || (filterNoise && kWebSchemes.contains(scheme)))
+            return std::nullopt;
+        id = QStringLiteral("url:") + url.toLower();
+    }
+
+    AppEntry entry;
+    entry.name = name;
+    entry.kind = AppKind::Shortcut;
+    entry.source = source;
+    entry.target = QDir::toNativeSeparators(info.absoluteFilePath());
+    entry.id = id;
+    entry.iconKey = entry.target;
+    entry.iconStamp = modificationStamp(info.absoluteFilePath());
     return entry;
 }
 
@@ -397,6 +447,23 @@ AppEntry executableEntry(const QString& exePath, const QString& displayName, App
     entry.iconKey = entry.target;
     entry.iconStamp = modificationStamp(exePath);
     return entry;
+}
+
+// Builds an entry for any supported file type; `filterNoise` drops non-application files.
+std::optional<AppEntry> fileEntry(const QFileInfo& info, AppSource source, bool filterNoise)
+{
+    const QString suffix = info.suffix().toLower();
+    if (suffix == u"lnk")
+        return shortcutEntry(info.absoluteFilePath(), source, filterNoise);
+    if (suffix == u"url" || suffix == u"appref-ms")
+        return shellFileEntry(info, source, filterNoise);
+    if (suffix == u"exe")
+        return filterNoise && isNoiseExecutable(info.fileName())
+            ? std::nullopt
+            : std::optional<AppEntry>(executableEntry(info.absoluteFilePath(), {}, source));
+    if (filterNoise)
+        return std::nullopt;
+    return executableEntry(info.absoluteFilePath(), {}, source); // user-chosen .bat, .cmd, ...
 }
 
 // ---------------------------------------------------------------------------
@@ -447,23 +514,24 @@ private:
 // Sources
 // ---------------------------------------------------------------------------
 
-void scanStartMenu(const QString& root, Collector& collector)
+void scanStartMenu(const QString& root, Collector& collector, const std::stop_token& stop)
 {
     if (root.isEmpty())
         return;
 
-    QDirIterator it(root, {QStringLiteral("*.lnk")}, QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
+    QDirIterator it(root, {QStringLiteral("*.lnk"), QStringLiteral("*.url"), QStringLiteral("*.appref-ms")},
+                    QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext() && !stop.stop_requested()) {
         const QString path = it.next();
         // Startup items duplicate regular entries and are not meant to be launched by hand.
         if (path.contains(QStringLiteral("/Startup/"), Qt::CaseInsensitive))
             continue;
-        if (std::optional<AppEntry> entry = shortcutEntry(path, AppSource::StartMenu, true))
+        if (std::optional<AppEntry> entry = fileEntry(it.fileInfo(), AppSource::StartMenu, true))
             collector.add(std::move(*entry));
     }
 }
 
-void scanPackagedApps(Collector& collector)
+void scanPackagedApps(Collector& collector, const std::stop_token& stop)
 {
     ComPtr<IShellItem> folder;
     if (FAILED(SHGetKnownFolderItem(FOLDERID_AppsFolder, KF_FLAG_DEFAULT, nullptr, IID_PPV_ARGS(&folder))))
@@ -474,7 +542,7 @@ void scanPackagedApps(Collector& collector)
         return;
 
     ComPtr<IShellItem> item;
-    while (items->Next(1, item.ReleaseAndGetAddressOf(), nullptr) == S_OK) {
+    while (!stop.stop_requested() && items->Next(1, item.ReleaseAndGetAddressOf(), nullptr) == S_OK) {
         // Packaged apps are identified by "<PackageFamilyName>!<AppId>"; other entries in
         // the Apps folder are desktop programs already covered by the Start menu scan.
         const QString aumid = itemDisplayName(item.Get(), SIGDN_PARENTRELATIVEPARSING);
@@ -513,7 +581,7 @@ QString executableFromDisplayIcon(const QString& displayIcon)
     return info.absoluteFilePath();
 }
 
-void scanUninstallRegistry(Collector& collector)
+void scanUninstallRegistry(Collector& collector, const std::stop_token& stop)
 {
     struct Hive {
         const char* key;
@@ -530,6 +598,8 @@ void scanUninstallRegistry(Collector& collector)
         QSettings registry(QString::fromLatin1(hive.key) + QString::fromLatin1(kUninstall), hive.format);
         const QStringList keys = registry.childGroups();
         for (const QString& key : keys) {
+            if (stop.stop_requested())
+                return;
             registry.beginGroup(key);
             const QString name = registry.value("DisplayName").toString().trimmed();
             const bool skip = name.isEmpty() || isNoiseRegistryName(name)
@@ -545,27 +615,28 @@ void scanUninstallRegistry(Collector& collector)
     }
 }
 
-void scanCustomFolder(const QString& folder, Collector& collector)
+// Scans the folder and at most two levels of subfolders, breadth-first, without
+// following links, so even a drive root costs a bounded amount of work.
+void scanCustomFolder(const QString& folder, Collector& collector, const std::stop_token& stop)
 {
     constexpr int kMaxDepth = 2;
-    constexpr int kMaxEntries = 4000;
-    const QString root = QDir::cleanPath(QDir::fromNativeSeparators(folder));
-    const int rootDepth = static_cast<int>(root.count(u'/'));
+    constexpr int kMaxVisited = 4000; // files and folders examined
 
     int visited = 0;
-    QDirIterator it(root, {QStringLiteral("*.exe"), QStringLiteral("*.lnk")}, QDir::Files,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext() && ++visited <= kMaxEntries) {
-        const QString path = it.next();
-        if (static_cast<int>(path.count(u'/')) - rootDepth > kMaxDepth)
-            continue;
-
-        const QFileInfo info(path);
-        if (info.suffix().compare(QStringLiteral("lnk"), Qt::CaseInsensitive) == 0) {
-            if (std::optional<AppEntry> entry = shortcutEntry(path, AppSource::CustomFolder, true))
+    std::vector<std::pair<QString, int>> pending{{QDir::cleanPath(QDir::fromNativeSeparators(folder)), 0}};
+    for (size_t i = 0; i < pending.size(); ++i) {
+        const auto [directory, depth] = pending[i]; // copy: `pending` grows below
+        const QFileInfoList entries =
+            QDir(directory).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsLast);
+        for (const QFileInfo& info : entries) {
+            if (stop.stop_requested() || ++visited > kMaxVisited)
+                return;
+            if (info.isDir()) {
+                if (depth < kMaxDepth && !info.isSymLink() && !info.isJunction())
+                    pending.emplace_back(info.absoluteFilePath(), depth + 1);
+            } else if (std::optional<AppEntry> entry = fileEntry(info, AppSource::CustomFolder, true)) {
                 collector.add(std::move(*entry));
-        } else if (!isNoiseExecutable(info.fileName())) {
-            collector.add(executableEntry(path, {}, AppSource::CustomFolder));
+            }
         }
     }
 }
@@ -580,19 +651,14 @@ bool entryForFile(const QString& path, AppSource source, AppEntry& out)
     if (!info.isFile())
         return false;
 
-    if (info.suffix().compare(QStringLiteral("lnk"), Qt::CaseInsensitive) == 0) {
-        std::optional<AppEntry> entry = shortcutEntry(path, source, false);
-        if (!entry)
-            return false;
-        out = std::move(*entry);
-        return true;
-    }
-
-    out = executableEntry(path, {}, source);
+    std::optional<AppEntry> entry = fileEntry(info, source, false);
+    if (!entry)
+        return false;
+    out = std::move(*entry);
     return true;
 }
 
-std::vector<AppEntry> discover(const Options& options)
+std::vector<AppEntry> discover(const Options& options, const std::stop_token& stop)
 {
     Collector collector;
 
@@ -602,12 +668,12 @@ std::vector<AppEntry> discover(const Options& options)
             collector.add(std::move(entry));
     }
     for (const QString& folder : options.customFolders)
-        scanCustomFolder(folder, collector);
+        scanCustomFolder(folder, collector, stop);
 
-    scanStartMenu(knownFolderPath(FOLDERID_Programs), collector);
-    scanStartMenu(knownFolderPath(FOLDERID_CommonPrograms), collector);
-    scanPackagedApps(collector);
-    scanUninstallRegistry(collector);
+    scanStartMenu(knownFolderPath(FOLDERID_Programs), collector, stop);
+    scanStartMenu(knownFolderPath(FOLDERID_CommonPrograms), collector, stop);
+    scanPackagedApps(collector, stop);
+    scanUninstallRegistry(collector, stop);
 
     std::vector<AppEntry> apps = collector.take();
     QCollator collator;

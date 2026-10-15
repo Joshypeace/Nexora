@@ -4,6 +4,7 @@
 
 #include <QStringList>
 
+#include <stop_token>
 #include <vector>
 
 // Synchronous discovery primitives. They must run on a thread that has COM
@@ -15,10 +16,11 @@ struct Options {
     QStringList customApps;
 };
 
-// Returns deduplicated entries sorted by name. Icons are not loaded.
-std::vector<AppEntry> discover(const Options& options);
+// Returns deduplicated entries sorted by name. Icons are not loaded. Returns early
+// (with partial results) once `stop` is requested.
+std::vector<AppEntry> discover(const Options& options, const std::stop_token& stop);
 
-// Builds an entry for a single user-selected .lnk or executable file.
+// Builds an entry for a single user-selected file (.lnk, .url, .appref-ms, .exe, ...).
 bool entryForFile(const QString& path, AppSource source, AppEntry& out);
 
 // Extracts the shell icon for `iconKey` as a premultiplied ARGB image of `size` pixels.

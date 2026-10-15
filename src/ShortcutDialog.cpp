@@ -1,5 +1,7 @@
 #include "ShortcutDialog.h"
 
+#include "GlobalHotkey.h"
+
 #include <QDialogButtonBox>
 #include <QKeySequenceEdit>
 #include <QLabel>
@@ -16,15 +18,17 @@ ShortcutDialog::ShortcutDialog(const QKeySequence& current, QWidget* parent)
     m_edit->setClearButtonEnabled(true);
 
     auto* hint = new QLabel(tr("Press the key combination that should open Nexora.\n"
-                               "Include Ctrl, Alt, Shift or Win, for example Ctrl+Space or Alt+Space."),
+                               "It must include Ctrl, Alt or Win, for example Ctrl+Space or Alt+Space."),
                             this);
     hint->setWordWrap(true);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    connect(m_edit, &QKeySequenceEdit::keySequenceChanged, this, [buttons](const QKeySequence& sequence) {
-        buttons->button(QDialogButtonBox::Save)->setEnabled(!sequence.isEmpty());
+    QPushButton* save = buttons->button(QDialogButtonBox::Save);
+    save->setEnabled(GlobalHotkey::isAcceptable(current));
+    connect(m_edit, &QKeySequenceEdit::keySequenceChanged, this, [save](const QKeySequence& sequence) {
+        save->setEnabled(GlobalHotkey::isAcceptable(sequence));
     });
 
     auto* layout = new QVBoxLayout(this);

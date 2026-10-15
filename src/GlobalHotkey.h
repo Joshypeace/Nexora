@@ -23,6 +23,9 @@ public:
     bool setShortcut(const QKeySequence& sequence);
     QKeySequence shortcut() const { return m_sequence; }
 
+    // True for a single key combination with Ctrl, Alt or Win (or a bare F13-F24).
+    static bool isAcceptable(const QKeySequence& sequence);
+
     // Asks an already running instance to show its launcher. Returns false when none is running.
     static bool signalRunningInstance();
 

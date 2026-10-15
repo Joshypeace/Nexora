@@ -20,7 +20,8 @@ public:
     ~DiscoveryService() override;
 
     void loadCache();
-    void refresh(const AppDiscovery::Options& options);
+    // Rescans in the background. Unchanged icons are reused unless `reloadIcons` is set.
+    void refresh(const AppDiscovery::Options& options, bool reloadIcons = false);
 
     const std::vector<AppEntry>& apps() const { return m_apps; }
     bool isBusy() const { return m_busy; }
@@ -44,6 +45,7 @@ private:
     std::jthread m_worker;
     bool m_busy = false;
     bool m_refreshQueued = false;
+    bool m_queuedReloadIcons = false;
     AppDiscovery::Options m_queuedOptions;
     QDateTime m_lastRefresh;
 };

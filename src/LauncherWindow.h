@@ -31,6 +31,7 @@ public:
     void summon();
     void dismiss();
     void toggle();
+    void toggleFromTray();
 
     void setApps(const std::vector<AppEntry>& apps);
     void updateIcons(const QHash<QString, QImage>& icons);
