@@ -88,13 +88,26 @@ file(TO_NATIVE_PATH "${ICON}" icon_source)
 file(MAKE_DIRECTORY "${OUT_DIR}")
 set(wxs "${OUT_DIR}/Nexora.wxs")
 file(WRITE "${wxs}" "<?xml version=\"1.0\" encoding=\"utf-8\"?>
-<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">
+<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\" xmlns:util=\"http://schemas.microsoft.com/wix/UtilExtension\">
   <Product Id=\"*\" Name=\"Nexora\" Language=\"1033\" Version=\"${VERSION}\" Manufacturer=\"Nexora\"
            UpgradeCode=\"${UPGRADE_CODE}\">
     <Package InstallerVersion=\"500\" Compressed=\"yes\" InstallScope=\"perUser\" InstallPrivileges=\"limited\"
              Description=\"Nexora application launcher\" />
-    <MajorUpgrade DowngradeErrorMessage=\"A newer version of Nexora is already installed.\" />
+    <!-- Same-version rebuilds replace the installed copy instead of installing side by side.
+         The old product is removed completely before the new one installs (the default
+         afterInstallValidate scheduling), so per-folder components may change between builds. -->
+    <MajorUpgrade AllowSameVersionUpgrades=\"yes\" DowngradeErrorMessage=\"A newer version of Nexora is already installed.\" />
     <MediaTemplate EmbedCab=\"yes\" />
+
+    <!-- Nexora normally runs in the tray. Ask it to quit (it exits on WM_CLOSE while hidden)
+         so its files are not in use during an upgrade or uninstall. -->
+    <util:CloseApplication Id=\"CloseNexora\" Target=\"Nexora.exe\" CloseMessage=\"yes\" RebootPrompt=\"no\" />
+
+    <!-- Current \"Start with Windows\" state, so upgrades and repairs keep the user's choice. -->
+    <Property Id=\"EXISTING_AUTOSTART\">
+      <RegistrySearch Id=\"FindAutostart\" Root=\"HKCU\" Key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Run\"
+                      Name=\"Nexora\" Type=\"raw\" />
+    </Property>
 
     <Icon Id=\"NexoraIcon\" SourceFile=\"${icon_source}\" />
     <Property Id=\"ARPPRODUCTICON\" Value=\"NexoraIcon\" />
@@ -124,8 +137,10 @@ ${component_xml}
     </Component>
 
     <!-- Same value the tray's \"Start with Windows\" toggle writes, so the two stay in sync
-         and uninstalling removes it. -->
-    <Component Id=\"CMP_Autostart\" Directory=\"INSTALLFOLDER\" Guid=\"${autostart_guid}\">
+         and uninstalling removes it. Enabled on a fresh install; afterwards (upgrade or
+         repair) only kept if the user still has it on. Transitive re-evaluates the condition. -->
+    <Component Id=\"CMP_Autostart\" Directory=\"INSTALLFOLDER\" Guid=\"${autostart_guid}\" Transitive=\"yes\">
+      <Condition><![CDATA[(NOT Installed AND NOT WIX_UPGRADE_DETECTED) OR EXISTING_AUTOSTART]]></Condition>
       <RegistryValue Root=\"HKCU\" Key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Run\" Name=\"Nexora\"
                      Type=\"string\" Value=\"&quot;[INSTALLFOLDER]Nexora.exe&quot; --background\" KeyPath=\"yes\" />
     </Component>
@@ -144,14 +159,16 @@ ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
 set(wixobj "${OUT_DIR}/Nexora.wixobj")
 set(msi "${OUT_DIR}/Nexora-${VERSION}-x64.msi")
 
-execute_process(COMMAND "${WIX_BIN}/candle.exe" -nologo -arch x64 -out "${wixobj}" "${wxs}"
+execute_process(COMMAND "${WIX_BIN}/candle.exe" -nologo -arch x64 -ext WixUtilExtension -out "${wixobj}" "${wxs}"
                 RESULT_VARIABLE result)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "candle failed (${result})")
 endif()
 
 # ICE91 only warns that per-user files won't be redirected for other users, which is the intent.
-execute_process(COMMAND "${WIX_BIN}/light.exe" -nologo -sice:ICE91 -out "${msi}" "${wixobj}"
+# ICE61 warns about AllowSameVersionUpgrades, which is deliberate (see MajorUpgrade above).
+execute_process(COMMAND "${WIX_BIN}/light.exe" -nologo -ext WixUtilExtension -sice:ICE91 -sice:ICE61
+                        -out "${msi}" "${wixobj}"
                 RESULT_VARIABLE result)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "light failed (${result})")

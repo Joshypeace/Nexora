@@ -14,7 +14,9 @@ Pick one from `dist\` (see [Build](#build) to produce them):
 
 - **`Nexora-1.0.0-x64.msi`**
   - Per-user installer. It needs no administrator rights and installs to `%LOCALAPPDATA%\Programs\Nexora`.
-  - It adds a Start menu shortcut and starts Nexora with Windows. Turn that off from the tray menu.
+  - It adds a Start menu shortcut and starts Nexora with Windows. Turn that off from the tray menu; upgrades and repairs keep your choice.
+  - A running Nexora is closed automatically during upgrades and uninstalls.
+  - Reinstalling a rebuilt package of the same version replaces the existing install.
   - It appears in *Settings → Apps*, and uninstalling removes everything it added.
   - Your settings in `%LOCALAPPDATA%\Nexora` are kept on uninstall.
 - **`Nexora-1.0.0-portable-x64.zip`**
@@ -76,7 +78,8 @@ cmake --build --preset release --target portable installer
 | `tst_cache` | Round trip including icons and Unicode; corrupt, outdated and out-of-range files |
 | `tst_discovery` | Custom-folder depth and noise filtering, `.url` handling, Start menu discovery, cancellation, icon extraction (desktop and packaged) |
 | `tst_launcher` | Elevation rules, error reporting, async result delivery and lifetime safety |
-| `tst_ui` | The real launcher window: typing, keyboard navigation, column layout, hover highlight, `+` menu, context menu, empty/loading states, Enter and Esc. It saves snapshots to `out/build/<preset>/tests/snapshots` and checks the OS cursor is never moved. |
+| `tst_watcher` | Recursive change detection, ignoring unrelated writes and the data folder, subfolders stay renameable |
+| `tst_ui` | The real launcher window: typing, keyboard navigation, column layout, hover highlight, `+` menu, context menu, empty/loading states, Enter and Esc. It saves snapshots to `out/build/<preset>/tests/snapshots`. Mouse input goes through Qt's window-level injection, so the OS cursor is never moved. If you click elsewhere during the run, the launcher dismisses itself and the remaining checks are skipped. |
 
 Tests use a temporary data folder (`NEXORA_DATA_DIR`), so they never touch your real settings or cache. `tst_ui` is labelled `ui`; skip it with `ctest -LE ui`.
 
@@ -123,7 +126,8 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 | Global shortcut | `GlobalHotkey` | `RegisterHotKey` on a message-only window; also receives "show" from a second instance |
 | Settings | `Settings` | INI file plus the HKCU `Run` value |
 | Theme | `Theme` | Palette, fonts, rounded translucent menus (including Qt's built-in ones) |
-| Wiring | `NexoraApp`, `main` | Tray menu, folder watching, single instance |
+| Folder watching | `FolderWatcher` | Recursive, non-locking change notifications for the Start menu and custom folders |
+| Wiring | `NexoraApp`, `main` | Tray menu, single instance, rescan scheduling |
 | Packaging | `packaging/make_installer.cmake` | Generates and builds the per-user WiX MSI from `dist\Nexora` |
 
 **Discovery sources**, in priority order for deduplication:
@@ -141,12 +145,15 @@ The application cache (names plus icons) is `%LOCALAPPDATA%\Nexora\apps.cache`. 
 Entries are deduplicated by target executable plus arguments, and by name for the secondary sources. Discovery never crawls whole drives and never runs anything; scans stop promptly when Nexora quits.
 
 On start the cached list appears immediately, and a fresh scan runs in the background. Nexora rescans when:
-- the Start menu folders or your custom folders change (watched live; the rescan waits about 2.5 s after the last change so installers settle first);
+- the Start menu folders or your custom folders change. These are watched live, with one recursive `ReadDirectoryChangesW` handle per folder tree that never locks the folders inside it. Only changes involving programs, shortcuts or folders count, and Nexora's own data folder is ignored. The rescan waits about 2.5 s after the last change so installers settle first;
 - the launcher is opened and the data is older than 10 minutes. Background scans re-extract icons only for new entries, or when a shortcut or the program it points to has changed. `+` → *Refresh applications* rescans and re-extracts every icon. A cold scan of about 160 apps takes about 5 s on the development machine; the grid appears before icons finish streaming in.
 
 **Frosted glass:** the launcher is a regular (non-layered) top-level window. Its native frame is folded into the client area with Qt's `QWindowsWindow::setCustomMargins`, so DWM still provides the shadow, Windows 11 rounded corners, open/close transitions and the `DWMSBT_TRANSIENTWINDOW` acrylic backdrop. The background artwork is painted over it at partial opacity under a dark navy overlay, so the blurred desktop shows through. While the launcher is open every monitor is dimmed, and a click on any of them dismisses it without reaching the window underneath.
 
-**Footprint:** between uses Nexora unloads the shell extension DLLs that icon extraction pulls in and trims its working set, to about 1 MB resident (about 40 MB private). When started with `--background` it pre-renders the launcher off-screen, so the first Ctrl+Space opens about as fast as later ones.
+**Footprint:**
+- **Idle memory:** between uses Nexora unloads the shell extension DLLs that icon extraction pulls in. It also trims its working set after each scan and each dismiss, to about 1 MB resident (about 40 MB private).
+- **Warm-up:** started with `--background`, Nexora pre-renders the launcher off-screen. This halved the first open on the development machine, to about 0.2 s; later opens take about 0.1 s.
+- **Trade-off:** the trimmed pages come back as soft faults when the launcher next opens, which is cheap. Under heavy memory pressure they can be hard faults, and that open is slower.
 
 ## Known limitations
 

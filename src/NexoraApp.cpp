@@ -44,12 +44,10 @@ NexoraApp::NexoraApp()
     m_changeDebounce.setSingleShot(true);
     m_changeDebounce.setInterval(2500);
     connect(&m_changeDebounce, &QTimer::timeout, this, &NexoraApp::refresh);
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_changeDebounce, qOverload<>(&QTimer::start));
+    connect(&m_watcher, &FolderWatcher::changed, &m_changeDebounce, qOverload<>(&QTimer::start));
     connect(&m_discovery, &DiscoveryService::busyChanged, this, [this](bool busy) {
-        if (busy)
-            return;
-        updateWatchedFolders(); // pick up newly created subfolders
-        if (!m_window->isVisible())
+        // Release the memory a scan used while Nexora idles in the tray.
+        if (!busy && !m_window->isVisible())
             SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
     });
 
@@ -72,6 +70,7 @@ void NexoraApp::start(bool showLauncher)
 
     m_discovery.loadCache();
     m_discovery.refresh(discoveryOptions());
+    updateWatchedFolders();
 
     if (showLauncher)
         m_window->summon();
@@ -156,12 +155,9 @@ void NexoraApp::changeShortcut()
 
 void NexoraApp::updateWatchedFolders()
 {
-    const QStringList current = m_watcher.directories();
-    if (!current.isEmpty())
-        m_watcher.removePaths(current);
-    const QStringList folders = AppDiscovery::watchedFolders(discoveryOptions());
-    if (!folders.isEmpty())
-        m_watcher.addPaths(folders);
+    // Our own cache and settings writes must never trigger a rescan (they would loop),
+    // even if the data folder sits inside a watched custom folder.
+    m_watcher.setFolders(AppDiscovery::watchedFolders(discoveryOptions()), {Settings::dataDirectory()});
 }
 
 AppDiscovery::Options NexoraApp::discoveryOptions() const
@@ -195,6 +191,7 @@ void NexoraApp::addApplication(const QString& path)
 void NexoraApp::addFolder(const QString& path)
 {
     m_settings.addCustomFolder(QDir::toNativeSeparators(path));
+    updateWatchedFolders();
     refresh();
 }
 

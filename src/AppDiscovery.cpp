@@ -658,15 +658,11 @@ namespace AppDiscovery {
 
 QStringList watchedFolders(const Options& options)
 {
+    // Roots only: the watcher observes each tree recursively.
     QStringList folders;
     for (const QString& root : {knownFolderPath(FOLDERID_Programs), knownFolderPath(FOLDERID_CommonPrograms)}) {
-        if (root.isEmpty())
-            continue;
-        folders.append(root);
-        // A directory watch only reports its direct children, so add every subfolder too.
-        QDirIterator it(root, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-        while (it.hasNext())
-            folders.append(it.next());
+        if (!root.isEmpty())
+            folders.append(root);
     }
     for (const QString& folder : options.customFolders)
         folders.append(QDir::cleanPath(QDir::fromNativeSeparators(folder)));

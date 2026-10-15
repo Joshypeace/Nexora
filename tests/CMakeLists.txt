@@ -18,6 +18,7 @@ nexora_add_test(tst_hotkey)
 nexora_add_test(tst_cache)
 nexora_add_test(tst_discovery)
 nexora_add_test(tst_launcher)
+nexora_add_test(tst_watcher)
 nexora_add_test(tst_ui)
 
 # The UI test shows a real window briefly; label it so it can be skipped (ctest -LE ui).
