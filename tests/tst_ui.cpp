@@ -116,6 +116,10 @@ private slots:
 
         m_window->summon();
         QVERIFY(QTest::qWaitForWindowExposed(m_window.get()));
+        // Dismissal and focus checks need a launcher that really owns the foreground; the
+        // foreground lock can refuse that to a process started from a background shell.
+        if (!QTest::qWaitForWindowActive(m_window.get()))
+            QSKIP("Windows did not let the test process take the foreground");
         QTest::qWait(300); // reveal animation
 
         m_search = m_window->findChild<QLineEdit*>(QStringLiteral("search"));
@@ -127,7 +131,11 @@ private slots:
 
     void init()
     {
-        if (qstrcmp(QTest::currentTestFunction(), "escapeDismisses") == 0 || m_window->isVisible())
+        if (m_window->isVisible()) {
+            m_lostActivationWhileVisible = false; // only interference since the last test counts
+            return;
+        }
+        if (qstrcmp(QTest::currentTestFunction(), "escapeDismisses") == 0)
             return;
         // Skip only when the application lost activation while the launcher was still
         // showing (developer input during the run, which dismisses it by design). A

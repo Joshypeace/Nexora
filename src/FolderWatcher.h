@@ -29,6 +29,10 @@ public:
     // Replaces the watched roots. Changes at or below any `ignored` path are not reported.
     void setFolders(const std::vector<Root>& roots, const QStringList& ignored);
 
+    // Paths of the currently discovered applications. Removing or renaming a folder that
+    // contains one always counts, whatever the folder's name looks like ("node-v20.11.1").
+    void setKnownPaths(const QStringList& paths);
+
     // Number of roots currently being watched (missing or failed roots are not counted).
     int activeCount() const;
 
@@ -50,6 +54,9 @@ private:
 
     std::vector<Root> m_roots;
     std::vector<std::unique_ptr<Watch>> m_watches; // parallel to m_roots; null when inactive
+    bool containsKnownPath(const QString& folder) const;
+
     QStringList m_ignored;
+    QStringList m_knownPaths; // normalized, sorted
     QTimer m_retry;
 };

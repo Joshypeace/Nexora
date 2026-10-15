@@ -114,6 +114,24 @@ void FolderWatcher::setFolders(const std::vector<Root>& roots, const QStringList
         m_retry.start();
 }
 
+void FolderWatcher::setKnownPaths(const QStringList& paths)
+{
+    m_knownPaths.clear();
+    for (const QString& path : paths) {
+        if (!path.isEmpty())
+            m_knownPaths.append(normalized(path));
+    }
+    std::sort(m_knownPaths.begin(), m_knownPaths.end());
+}
+
+bool FolderWatcher::containsKnownPath(const QString& folder) const
+{
+    // Sorted, so every path inside "folder/" follows the first one not less than it.
+    const QString prefix = folder + u'/';
+    const auto it = std::lower_bound(m_knownPaths.begin(), m_knownPaths.end(), prefix);
+    return it != m_knownPaths.end() && it->startsWith(prefix);
+}
+
 int FolderWatcher::activeCount() const
 {
     return static_cast<int>(
@@ -178,8 +196,12 @@ void FolderWatcher::onSignaled(Watch& watch)
             const int depth = static_cast<int>(name.count(u'/')) + 1;
             const bool appFile = hasAppSuffix(QFileInfo(name).suffix().toLower());
             const bool tooDeep = watch.maxDepth >= 0 && (appFile ? depth > watch.maxDepth : depth >= watch.maxDepth);
-            if (!ignored && !tooDeep && full != rootKey && isRelevant(full, info->Action == FILE_ACTION_MODIFIED))
+            const bool vanished = info->Action == FILE_ACTION_REMOVED || info->Action == FILE_ACTION_RENAMED_OLD_NAME;
+            if (!ignored && full != rootKey
+                && ((!tooDeep && isRelevant(full, info->Action == FILE_ACTION_MODIFIED))
+                    || (vanished && containsKnownPath(full)))) {
                 relevant = true;
+            }
             if (info->NextEntryOffset == 0)
                 break;
             offset += info->NextEntryOffset;
