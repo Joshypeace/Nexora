@@ -10,12 +10,13 @@ public:
 
     static QString dataDirectory();
 
-    // Creates `dir` and, if it has no omnipane.ini yet, copies `legacyIni` (settings from the
-    // app's former name, Nexora) into it. Returns `dir`.
+    // Creates `dir` and, the first time this process sees it without an omnipane.ini, copies
+    // `legacyIni` (settings from the app's former name, Nexora) into it. Returns `dir`.
     static QString prepareDataDirectory(const QString& dir, const QString& legacyIni);
     static bool migrateLegacySettings(const QString& legacyIni, const QString& newIni);
 
-    // Replaces a Nexora "Start with Windows" entry whose program no longer exists.
+    // Moves a Nexora "Start with Windows" entry to Omnipane when Nexora.exe was replaced by
+    // Omnipane.exe in the same folder; leaves every other situation alone.
     static void migrateLegacyAutostart();
     static void migrateLegacyAutostart(const QString& runKey); // for tests
 
