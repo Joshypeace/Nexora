@@ -1,11 +1,11 @@
 @echo off
-rem Builds Nexora from a plain shell: loads the MSVC x64 environment, configures, builds,
-rem runs the headless tests and deploys the Qt runtime to dist\Nexora.
+rem Builds Omnipane from a plain shell: loads the MSVC x64 environment, configures, builds,
+rem runs the headless tests and deploys the Qt runtime to dist\Omnipane.
 rem
 rem   tools\build.cmd [release|debug] [package]
 rem
-rem "package" also creates dist\Nexora-<version>-portable-x64.zip and, when WiX Toolset v3
-rem is installed, the per-user installer dist\Nexora-<version>-x64.msi.
+rem "package" also creates dist\Omnipane-<version>-portable-x64.zip and, when WiX Toolset v3
+rem is installed, the per-user installer dist\Omnipane-<version>-x64.msi.
 setlocal
 set PRESET=%1
 if "%PRESET%"=="" set PRESET=release
@@ -22,7 +22,7 @@ rem Headless tests only; the UI test opens a real window (run it with: ctest --p
 ctest --test-dir out\build\%PRESET% -LE ui --output-on-failure || exit /b 1
 cmake --build --preset %PRESET% --target deploy || exit /b 1
 echo.
-echo Built dist\Nexora\Nexora.exe
+echo Built dist\Omnipane\Omnipane.exe
 
 if /i not "%PACKAGE%"=="package" exit /b 0
 cmake --build --preset %PRESET% --target portable || exit /b 1

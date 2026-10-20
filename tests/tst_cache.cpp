@@ -4,7 +4,10 @@
 #include "Settings.h"
 
 #include <QDataStream>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -32,7 +35,7 @@ private slots:
     {
         QVERIFY(m_dir.isValid());
         // Keep the user's real cache untouched.
-        qputenv("NEXORA_DATA_DIR", m_dir.path().toUtf8());
+        qputenv("OMNIPANE_DATA_DIR", m_dir.path().toUtf8());
         QCOMPARE(Settings::dataDirectory(), m_dir.path());
     }
 
@@ -100,6 +103,27 @@ private slots:
         QCOMPARE(AppCache::load().size(), size_t(1)); // sanity: the hand-written format is valid
         writeRaw(0x4E58524Fu, 2, 9);
         QVERIFY(AppCache::load().empty());
+    }
+
+    void migratesSettingsFromTheFormerName()
+    {
+        const QString legacy = m_dir.filePath(QStringLiteral("Nexora/nexora.ini"));
+        QDir().mkpath(QFileInfo(legacy).absolutePath());
+        {
+            QSettings old(legacy, QSettings::IniFormat);
+            old.setValue("hotkey", QStringLiteral("Alt+Space"));
+            old.setValue("customFolders", QStringList{QStringLiteral("D:\\PortableApps")});
+        }
+        const QString target = m_dir.filePath(QStringLiteral("Omnipane/omnipane.ini"));
+        Settings::migrateLegacySettings(legacy, target);
+        const QSettings migrated(target, QSettings::IniFormat);
+        QCOMPARE(migrated.value("hotkey").toString(), QStringLiteral("Alt+Space"));
+        QCOMPARE(migrated.value("customFolders").toStringList(), QStringList{QStringLiteral("D:\\PortableApps")});
+
+        // Nothing to migrate is a no-op.
+        Settings::migrateLegacySettings(m_dir.filePath(QStringLiteral("missing.ini")),
+                                        m_dir.filePath(QStringLiteral("Other/omnipane.ini")));
+        QVERIFY(!QFileInfo::exists(m_dir.filePath(QStringLiteral("Other/omnipane.ini"))));
     }
 
     void missingFileIsEmpty()

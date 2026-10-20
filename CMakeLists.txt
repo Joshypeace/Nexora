@@ -1,9 +1,9 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 
-project(Nexora VERSION 1.0.0 DESCRIPTION "A minimal floating application launcher for Windows" LANGUAGES CXX)
+project(Omnipane VERSION 1.0.0 DESCRIPTION "A minimal floating application launcher for Windows" LANGUAGES CXX)
 
 if(NOT WIN32)
-    message(FATAL_ERROR "Nexora is a Windows-only application.")
+    message(FATAL_ERROR "Omnipane is a Windows-only application.")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -16,15 +16,15 @@ set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets GuiPrivate)
 qt_standard_project_setup()
 
-option(NEXORA_BUILD_TESTS "Build the Nexora test suite" ON)
+option(OMNIPANE_BUILD_TESTS "Build the Omnipane test suite" ON)
 
 # Compiler settings shared by the app, its core library and the tests.
-function(nexora_configure_target target)
+function(omnipane_configure_target target)
     target_compile_definitions(${target} PRIVATE
         UNICODE _UNICODE
         WIN32_LEAN_AND_MEAN NOMINMAX
         _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A00000C
-        NEXORA_VERSION="${PROJECT_VERSION}"
+        OMNIPANE_VERSION="${PROJECT_VERSION}"
     )
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
@@ -32,7 +32,7 @@ function(nexora_configure_target target)
 endfunction()
 
 # Everything except main(), so the test suite can link the real components.
-qt_add_library(NexoraCore STATIC
+qt_add_library(OmnipaneCore STATIC
     src/AppEntry.h
     src/ComApartment.h
     src/AppCache.h            src/AppCache.cpp
@@ -47,16 +47,16 @@ qt_add_library(NexoraCore STATIC
     src/DimOverlay.h          src/DimOverlay.cpp
     src/Spinner.h             src/Spinner.cpp
     src/LauncherWindow.h      src/LauncherWindow.cpp
-    src/NexoraApp.h           src/NexoraApp.cpp
+    src/OmnipaneApp.h           src/OmnipaneApp.cpp
     src/ShortcutDialog.h      src/ShortcutDialog.cpp
     src/Theme.h               src/Theme.cpp
     src/FolderWatcher.h       src/FolderWatcher.cpp
 )
 # INTERFACE only: on the library itself, src/ on the include path would make the
 # Windows SDK's <appmodel.h> resolve to our AppModel.h (case-insensitive filesystem).
-target_include_directories(NexoraCore INTERFACE src)
+target_include_directories(OmnipaneCore INTERFACE src)
 
-qt_add_resources(NexoraCore "nexora_assets"
+qt_add_resources(OmnipaneCore "omnipane_assets"
     PREFIX "/"
     BASE resources
     FILES
@@ -64,22 +64,22 @@ qt_add_resources(NexoraCore "nexora_assets"
         resources/background.jpg
 )
 
-nexora_configure_target(NexoraCore)
-target_link_libraries(NexoraCore PUBLIC
+omnipane_configure_target(OmnipaneCore)
+target_link_libraries(OmnipaneCore PUBLIC
     Qt6::Widgets
     Qt6::GuiPrivate
     dwmapi shell32 ole32 shlwapi version user32 uuid advapi32
 )
 
-qt_add_executable(Nexora WIN32
+qt_add_executable(Omnipane WIN32
     src/main.cpp
-    resources/nexora.rc
-    resources/nexora.manifest
+    resources/omnipane.rc
+    resources/omnipane.manifest
 )
-nexora_configure_target(Nexora)
-target_link_libraries(Nexora PRIVATE NexoraCore)
+omnipane_configure_target(Omnipane)
+target_link_libraries(Omnipane PRIVATE OmnipaneCore)
 
-if(NEXORA_BUILD_TESTS)
+if(OMNIPANE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
@@ -89,31 +89,31 @@ get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
 get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
 find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin_dir}")
 
-set(NEXORA_DIST_DIR "${CMAKE_SOURCE_DIR}/dist/Nexora" CACHE PATH "Folder receiving the runnable Nexora build")
+set(OMNIPANE_DIST_DIR "${CMAKE_SOURCE_DIR}/dist/Omnipane" CACHE PATH "Folder receiving the runnable Omnipane build")
 
 if(WINDEPLOYQT_EXECUTABLE)
     add_custom_target(deploy
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NEXORA_DIST_DIR}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${NEXORA_DIST_DIR}"
-        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:Nexora>" "${NEXORA_DIST_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${OMNIPANE_DIST_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${OMNIPANE_DIST_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:Omnipane>" "${OMNIPANE_DIST_DIR}"
         COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw
                 --no-compiler-runtime --skip-plugin-types tls,networkinformation,generic,qmltooling
-                "${NEXORA_DIST_DIR}/Nexora.exe"
-        DEPENDS Nexora
-        COMMENT "Deploying Nexora and the Qt runtime to ${NEXORA_DIST_DIR}"
+                "${OMNIPANE_DIST_DIR}/Omnipane.exe"
+        DEPENDS Omnipane
+        COMMENT "Deploying Omnipane and the Qt runtime to ${OMNIPANE_DIST_DIR}"
         VERBATIM)
 endif()
 
-install(TARGETS Nexora RUNTIME DESTINATION .)
+install(TARGETS Omnipane RUNTIME DESTINATION .)
 
 # Distribution packages, written to dist/: a portable zip and a per-user MSI (WiX v3).
-set(NEXORA_PACKAGE_DIR "${CMAKE_SOURCE_DIR}/dist")
+set(OMNIPANE_PACKAGE_DIR "${CMAKE_SOURCE_DIR}/dist")
 
 if(TARGET deploy)
     add_custom_target(portable
-        COMMAND "${CMAKE_COMMAND}" -E tar cf "${NEXORA_PACKAGE_DIR}/Nexora-${PROJECT_VERSION}-portable-x64.zip"
-                --format=zip Nexora
-        WORKING_DIRECTORY "${NEXORA_PACKAGE_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E tar cf "${OMNIPANE_PACKAGE_DIR}/Omnipane-${PROJECT_VERSION}-portable-x64.zip"
+                --format=zip Omnipane
+        WORKING_DIRECTORY "${OMNIPANE_PACKAGE_DIR}"
         DEPENDS deploy
         COMMENT "Creating the portable zip"
         VERBATIM)
@@ -126,14 +126,14 @@ if(TARGET deploy AND WIX_CANDLE_EXECUTABLE)
     get_filename_component(_wix_bin "${WIX_CANDLE_EXECUTABLE}" DIRECTORY)
     add_custom_target(installer
         COMMAND "${CMAKE_COMMAND}"
-                -DDIST_DIR=${NEXORA_DIST_DIR}
+                -DDIST_DIR=${OMNIPANE_DIST_DIR}
                 -DOUT_DIR=${CMAKE_BINARY_DIR}/installer
                 -DVERSION=${PROJECT_VERSION}
                 -DWIX_BIN=${_wix_bin}
-                -DICON=${CMAKE_SOURCE_DIR}/resources/nexora.ico
+                -DICON=${CMAKE_SOURCE_DIR}/resources/omnipane.ico
                 -P "${CMAKE_SOURCE_DIR}/packaging/make_installer.cmake"
-        COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_BINARY_DIR}/installer/Nexora-${PROJECT_VERSION}-x64.msi"
-                "${NEXORA_PACKAGE_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_BINARY_DIR}/installer/Omnipane-${PROJECT_VERSION}-x64.msi"
+                "${OMNIPANE_PACKAGE_DIR}"
         DEPENDS deploy
         COMMENT "Building the per-user MSI installer"
         VERBATIM)

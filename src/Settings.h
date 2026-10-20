@@ -3,12 +3,15 @@
 #include <QSettings>
 #include <QStringList>
 
-// Small wrapper around Nexora's INI file (%LOCALAPPDATA%\Nexora\nexora.ini).
+// Small wrapper around Omnipane's INI file (%LOCALAPPDATA%\Omnipane\omnipane.ini).
 class Settings {
 public:
     Settings();
 
     static QString dataDirectory();
+
+    // Copies settings from the app's former name (Nexora) when Omnipane has none yet.
+    static void migrateLegacySettings(const QString& legacyIni, const QString& newIni);
 
     QString hotkey() const;
     void setHotkey(const QString& sequence);

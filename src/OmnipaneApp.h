@@ -17,12 +17,12 @@ class QAction;
 class QMenu;
 
 // Wires the components together: tray icon, global hotkey, discovery and the launcher window.
-class NexoraApp : public QObject {
+class OmnipaneApp : public QObject {
     Q_OBJECT
 
 public:
-    NexoraApp();
-    ~NexoraApp() override;
+    OmnipaneApp();
+    ~OmnipaneApp() override;
 
     void start(bool showLauncher);
 

@@ -34,7 +34,7 @@ private:
         entry.id = QStringLiteral("app:") + name.toLower();
         entry.name = name;
         entry.kind = AppKind::Executable;
-        entry.target = QStringLiteral("C:\\Nexora-test\\") + name + QStringLiteral(".exe"); // never exists
+        entry.target = QStringLiteral("C:\\Omnipane-test\\") + name + QStringLiteral(".exe"); // never exists
         entry.resolvedPath = entry.target;
 
         QImage icon(96, 96, QImage::Format_ARGB32_Premultiplied);
@@ -52,7 +52,7 @@ private:
     // translucency, DWM effects and whatever is behind the window).
     void snapshot(QWidget* widget, const QString& name)
     {
-        const QString dir = qEnvironmentVariable("NEXORA_SNAPSHOT_DIR", QDir::currentPath() + QStringLiteral("/snapshots"));
+        const QString dir = qEnvironmentVariable("OMNIPANE_SNAPSHOT_DIR", QDir::currentPath() + QStringLiteral("/snapshots"));
         QDir().mkpath(dir);
         QVERIFY(widget->grab().save(dir + u'/' + name + QStringLiteral(".png")));
         const QRect frame = widget->frameGeometry();
@@ -93,7 +93,7 @@ private slots:
     void initTestCase()
     {
         QVERIFY(m_dataDir.isValid());
-        qputenv("NEXORA_DATA_DIR", m_dataDir.path().toUtf8());
+        qputenv("OMNIPANE_DATA_DIR", m_dataDir.path().toUtf8());
         Theme::apply(*qApp);
 
         m_window = std::make_unique<LauncherWindow>();
@@ -233,7 +233,7 @@ private slots:
         QVERIFY(menu);
         QCOMPARE(current().row(), 2); // right-click selects the item
         QCOMPARE(actionTexts(menu),
-                 QStringList({"Open", "Run as administrator", "Open file location", "Hide from Nexora"}));
+                 QStringList({"Open", "Run as administrator", "Open file location", "Hide from Omnipane"}));
         snapshot(menu, QStringLiteral("05-context-menu"));
         menu->close();
         QTRY_VERIFY(!QApplication::activePopupWidget());

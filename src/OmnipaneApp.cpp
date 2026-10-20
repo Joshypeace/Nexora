@@ -1,4 +1,4 @@
-#include "NexoraApp.h"
+#include "OmnipaneApp.h"
 
 #include "LauncherWindow.h"
 #include "ShortcutDialog.h"
@@ -16,7 +16,7 @@ constexpr qint64 kStaleAfterSeconds = 10 * 60;
 
 } // namespace
 
-NexoraApp::NexoraApp()
+OmnipaneApp::OmnipaneApp()
     : m_window(std::make_unique<LauncherWindow>())
     , m_trayMenu(std::make_unique<QMenu>())
 {
@@ -35,13 +35,13 @@ NexoraApp::NexoraApp()
     connect(&m_discovery, &DiscoveryService::iconsLoaded, m_window.get(), &LauncherWindow::updateIcons);
     connect(&m_discovery, &DiscoveryService::busyChanged, m_window.get(), &LauncherWindow::setBusy);
 
-    connect(m_window.get(), &LauncherWindow::shown, this, &NexoraApp::refreshIfStale);
-    connect(m_window.get(), &LauncherWindow::refreshRequested, this, &NexoraApp::refreshWithIcons);
-    connect(m_window.get(), &LauncherWindow::addApplicationRequested, this, &NexoraApp::addApplication);
-    connect(m_window.get(), &LauncherWindow::addFolderRequested, this, &NexoraApp::addFolder);
-    connect(m_window.get(), &LauncherWindow::hideRequested, this, &NexoraApp::hideApplication);
+    connect(m_window.get(), &LauncherWindow::shown, this, &OmnipaneApp::refreshIfStale);
+    connect(m_window.get(), &LauncherWindow::refreshRequested, this, &OmnipaneApp::refreshWithIcons);
+    connect(m_window.get(), &LauncherWindow::addApplicationRequested, this, &OmnipaneApp::addApplication);
+    connect(m_window.get(), &LauncherWindow::addFolderRequested, this, &OmnipaneApp::addFolder);
+    connect(m_window.get(), &LauncherWindow::hideRequested, this, &OmnipaneApp::hideApplication);
     connect(m_window.get(), &LauncherWindow::launchFailed, this, [this](const QString& name, const QString& error) {
-        m_tray.showMessage(QStringLiteral("Nexora"), tr("Couldn't open %1. %2").arg(name, error),
+        m_tray.showMessage(QStringLiteral("Omnipane"), tr("Couldn't open %1. %2").arg(name, error),
                            QSystemTrayIcon::Warning);
     });
 
@@ -51,17 +51,17 @@ NexoraApp::NexoraApp()
     // Installers add Start menu entries in bursts; rescan once things settle.
     m_changeDebounce.setSingleShot(true);
     m_changeDebounce.setInterval(2500);
-    connect(&m_changeDebounce, &QTimer::timeout, this, &NexoraApp::refresh);
+    connect(&m_changeDebounce, &QTimer::timeout, this, &OmnipaneApp::refresh);
     connect(&m_watcher, &FolderWatcher::changed, &m_changeDebounce, qOverload<>(&QTimer::start));
     connect(&m_discovery, &DiscoveryService::busyChanged, this, [this](bool busy) {
-        // Release the memory a scan used while Nexora idles in the tray.
+        // Release the memory a scan used while Omnipane idles in the tray.
         if (!busy && !m_window->isVisible())
             SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
     });
 
     buildTrayMenu();
     m_tray.setIcon(QApplication::windowIcon());
-    m_tray.setToolTip(QStringLiteral("Nexora"));
+    m_tray.setToolTip(QStringLiteral("Omnipane"));
     m_tray.setContextMenu(m_trayMenu.get());
     connect(&m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger)
@@ -69,9 +69,9 @@ NexoraApp::NexoraApp()
     });
 }
 
-NexoraApp::~NexoraApp() = default;
+OmnipaneApp::~OmnipaneApp() = default;
 
-void NexoraApp::start(bool showLauncher)
+void OmnipaneApp::start(bool showLauncher)
 {
     applyHotkey(QKeySequence::fromString(m_settings.hotkey(), QKeySequence::PortableText), true);
     m_tray.show();
@@ -86,10 +86,10 @@ void NexoraApp::start(bool showLauncher)
         m_window->warmUp();
 }
 
-void NexoraApp::buildTrayMenu()
+void OmnipaneApp::buildTrayMenu()
 {
     QMenu* menu = m_trayMenu.get();
-    m_openAction = menu->addAction(tr("Open Nexora"), m_window.get(), &LauncherWindow::summon);
+    m_openAction = menu->addAction(tr("Open Omnipane"), m_window.get(), &LauncherWindow::summon);
     menu->addSeparator();
     menu->addAction(tr("Add application…"), this, [this] {
         m_window->summon();
@@ -99,12 +99,12 @@ void NexoraApp::buildTrayMenu()
         m_window->summon();
         m_window->browseForFolder();
     });
-    menu->addAction(tr("Refresh applications"), this, &NexoraApp::refreshWithIcons);
-    m_restoreHiddenAction = menu->addAction(tr("Show hidden applications"), this, &NexoraApp::restoreHiddenApplications);
+    menu->addAction(tr("Refresh applications"), this, &OmnipaneApp::refreshWithIcons);
+    m_restoreHiddenAction = menu->addAction(tr("Show hidden applications"), this, &OmnipaneApp::restoreHiddenApplications);
     m_restoreHiddenAction->setEnabled(!m_settings.hiddenApps().isEmpty());
     menu->addSeparator();
 
-    menu->addAction(tr("Change shortcut…"), this, &NexoraApp::changeShortcut);
+    menu->addAction(tr("Change shortcut…"), this, &OmnipaneApp::changeShortcut);
 
     QAction* dim = menu->addAction(tr("Dim desktop behind launcher"));
     dim->setCheckable(true);
@@ -120,22 +120,22 @@ void NexoraApp::buildTrayMenu()
     connect(autostart, &QAction::toggled, this, [](bool enabled) { Settings::setLaunchAtStartup(enabled); });
 
     menu->addSeparator();
-    menu->addAction(tr("Quit Nexora"), qApp, &QApplication::quit);
+    menu->addAction(tr("Quit Omnipane"), qApp, &QApplication::quit);
 }
 
-void NexoraApp::applyHotkey(const QKeySequence& sequence, bool notifyOnFailure)
+void OmnipaneApp::applyHotkey(const QKeySequence& sequence, bool notifyOnFailure)
 {
     const bool ok = m_hotkey.setShortcut(sequence);
     const QString text = sequence.toString(QKeySequence::NativeText);
-    m_openAction->setText(ok ? tr("Open Nexora\t%1").arg(text) : tr("Open Nexora"));
+    m_openAction->setText(ok ? tr("Open Omnipane\t%1").arg(text) : tr("Open Omnipane"));
     if (!ok && notifyOnFailure) {
-        m_tray.showMessage(QStringLiteral("Nexora"),
+        m_tray.showMessage(QStringLiteral("Omnipane"),
                            tr("The shortcut %1 is unavailable. Choose another one from the tray menu.").arg(text),
                            QSystemTrayIcon::Warning);
     }
 }
 
-void NexoraApp::changeShortcut()
+void OmnipaneApp::changeShortcut()
 {
     m_window->dismiss();
     const QKeySequence previous = m_hotkey.shortcut();
@@ -155,13 +155,13 @@ void NexoraApp::changeShortcut()
         return;
     }
 
-    QMessageBox::warning(nullptr, QStringLiteral("Nexora"),
+    QMessageBox::warning(nullptr, QStringLiteral("Omnipane"),
                          tr("%1 can't be used: it is invalid or already taken by another application.")
                              .arg(requested.toString(QKeySequence::NativeText)));
     applyHotkey(previous, false);
 }
 
-void NexoraApp::updateWatchedFolders()
+void OmnipaneApp::updateWatchedFolders()
 {
     // Our own cache and settings writes must never trigger a rescan (they would loop),
     // even if the data folder sits inside a watched custom folder.
@@ -174,49 +174,49 @@ void NexoraApp::updateWatchedFolders()
     m_watcher.setFolders(roots, {Settings::dataDirectory()});
 }
 
-AppDiscovery::Options NexoraApp::discoveryOptions() const
+AppDiscovery::Options OmnipaneApp::discoveryOptions() const
 {
     return {m_settings.customFolders(), m_settings.customApps()};
 }
 
-void NexoraApp::refresh()
+void OmnipaneApp::refresh()
 {
     m_discovery.refresh(discoveryOptions());
 }
 
-void NexoraApp::refreshWithIcons()
+void OmnipaneApp::refreshWithIcons()
 {
     m_discovery.refresh(discoveryOptions(), true);
 }
 
-void NexoraApp::refreshIfStale()
+void OmnipaneApp::refreshIfStale()
 {
     const QDateTime last = m_discovery.lastRefresh();
     if (!m_discovery.isBusy() && (!last.isValid() || last.secsTo(QDateTime::currentDateTimeUtc()) > kStaleAfterSeconds))
         refresh();
 }
 
-void NexoraApp::addApplication(const QString& path)
+void OmnipaneApp::addApplication(const QString& path)
 {
     m_settings.addCustomApp(QDir::toNativeSeparators(path));
     refresh();
 }
 
-void NexoraApp::addFolder(const QString& path)
+void OmnipaneApp::addFolder(const QString& path)
 {
     m_settings.addCustomFolder(QDir::toNativeSeparators(path));
     updateWatchedFolders();
     refresh();
 }
 
-void NexoraApp::hideApplication(const QString& id)
+void OmnipaneApp::hideApplication(const QString& id)
 {
     m_settings.hideApp(id);
     m_window->setHiddenIds(m_settings.hiddenApps());
     m_restoreHiddenAction->setEnabled(true);
 }
 
-void NexoraApp::restoreHiddenApplications()
+void OmnipaneApp::restoreHiddenApplications()
 {
     m_settings.clearHiddenApps();
     m_window->setHiddenIds({});

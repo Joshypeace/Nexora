@@ -156,7 +156,7 @@ LauncherWindow::LauncherWindow(QWidget* parent)
     , m_background(QStringLiteral(":/background.jpg"))
 {
     setAttribute(Qt::WA_TranslucentBackground);
-    setWindowTitle(QStringLiteral("Nexora"));
+    setWindowTitle(QStringLiteral("Omnipane"));
     setFixedSize(kWindowSize);
     m_filter->setSourceModel(m_model);
 
@@ -253,7 +253,7 @@ QWidget* LauncherWindow::buildHeader()
     logo->setPixmap(logoPixmap);
     logo->setFixedSize(kLogo, kLogo);
 
-    auto* title = new QLabel(QStringLiteral("Nexora"), header);
+    auto* title = new QLabel(QStringLiteral("Omnipane"), header);
     title->setObjectName(QStringLiteral("title"));
 
     auto* add = new IconButton(Glyph::Plus, tr("Add applications"), header);
@@ -365,7 +365,7 @@ void LauncherWindow::dismiss()
         return;
     for (const auto& overlay : m_overlays)
         overlay->fadeOut();
-    // Nexora idles in the tray between uses; hand unused pages back to Windows once the
+    // Omnipane idles in the tray between uses; hand unused pages back to Windows once the
     // fade-out has finished. They are faulted back in transparently on the next show.
     QTimer::singleShot(1000, this, [this] {
         if (!isVisible())
@@ -592,7 +592,7 @@ void LauncherWindow::showItemMenu(const QPoint& position)
         });
     }
     menu->addSeparator();
-    menu->addAction(tr("Hide from Nexora"), this, [this, id = app.id] { emit hideRequested(id); });
+    menu->addAction(tr("Hide from Omnipane"), this, [this, id = app.id] { emit hideRequested(id); });
     menu->popup(m_view->viewport()->mapToGlobal(position));
 }
 
@@ -697,7 +697,7 @@ bool LauncherWindow::nativeEvent(const QByteArray& eventType, void* message, qin
         return true;
     case WM_CLOSE:
         // Alt+F4 on the open launcher just dismisses it. A close request while it is
-        // hidden comes from outside (an installer upgrading or removing Nexora, or
+        // hidden comes from outside (an installer upgrading or removing Omnipane, or
         // taskkill), so shut the whole tray app down cleanly.
         if (isVisible())
             dismiss();

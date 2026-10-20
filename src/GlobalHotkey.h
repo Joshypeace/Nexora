@@ -6,7 +6,7 @@
 #include <windows.h>
 
 // Registers a system-wide hotkey with RegisterHotKey. A hidden message-only
-// window receives WM_HOTKEY, plus activation requests from a second Nexora
+// window receives WM_HOTKEY, plus activation requests from a second Omnipane
 // instance, so neither depends on Qt's event loop being un-nested.
 class GlobalHotkey : public QObject {
     Q_OBJECT
