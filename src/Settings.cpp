@@ -26,32 +26,65 @@ Settings::Settings()
 
 QString Settings::dataDirectory()
 {
-    // OMNIPANE_DATA_DIR lets the test suite (or a portable setup) keep settings and cache elsewhere.
-    // Relative values are taken relative to Omnipane.exe, not the working directory (which is
-    // System32 when started from the Run key).
-    const QString overridden = qEnvironmentVariable("OMNIPANE_DATA_DIR");
+    // OMNIPANE_DATA_DIR lets the test suite (or a portable setup) keep settings and cache elsewhere;
+    // NEXORA_DATA_DIR is the variable's former name and still honoured. Relative values are taken
+    // relative to Omnipane.exe, not the working directory (System32 when started from the Run key).
+    QString overridden = qEnvironmentVariable("OMNIPANE_DATA_DIR");
+    if (overridden.isEmpty())
+        overridden = qEnvironmentVariable("NEXORA_DATA_DIR");
     if (!overridden.isEmpty()) {
         const QString dir = QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(overridden));
-        QDir().mkpath(dir);
-        return dir;
+        return prepareDataDirectory(dir, dir + QStringLiteral("/nexora.ini"));
     }
 
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    const QString dir = base + QStringLiteral("/Omnipane");
-    if (!QFileInfo::exists(dir))
-        migrateLegacySettings(base + QStringLiteral("/Nexora/nexora.ini"), dir + QStringLiteral("/omnipane.ini"));
+    return prepareDataDirectory(base + QStringLiteral("/Omnipane"), base + QStringLiteral("/Nexora/nexora.ini"));
+}
+
+QString Settings::prepareDataDirectory(const QString& dir, const QString& legacyIni)
+{
     QDir().mkpath(dir);
+    // Keyed on the settings file rather than the folder, so a failed copy is retried next time.
+    const QString ini = dir + QStringLiteral("/omnipane.ini");
+    if (!QFileInfo::exists(ini))
+        migrateLegacySettings(legacyIni, ini);
     return dir;
 }
 
-void Settings::migrateLegacySettings(const QString& legacyIni, const QString& newIni)
+bool Settings::migrateLegacySettings(const QString& legacyIni, const QString& newIni)
 {
     // Omnipane was called Nexora before; carry the user's hotkey, custom apps and folders,
-    // hidden apps and preferences over on first start. The icon cache is rebuilt instead.
+    // hidden apps and preferences over. The icon cache is rebuilt instead.
     if (!QFileInfo::exists(legacyIni))
-        return;
+        return false;
     QDir().mkpath(QFileInfo(newIni).absolutePath());
-    QFile::copy(legacyIni, newIni);
+    if (!QFile::copy(legacyIni, newIni))
+        return false;
+    // QFile::copy keeps a read-only attribute; Omnipane must be able to save its settings.
+    QFile::setPermissions(newIni, QFile::permissions(newIni) | QFileDevice::WriteOwner | QFileDevice::WriteUser);
+    return true;
+}
+
+void Settings::migrateLegacyAutostart()
+{
+    migrateLegacyAutostart(QString::fromLatin1(kRunKey));
+}
+
+void Settings::migrateLegacyAutostart(const QString& runKey)
+{
+    // A "Start with Windows" entry left by Nexora whose program is gone (replaced by Omnipane)
+    // would fail at every sign-in. Move it over to Omnipane. An entry for a Nexora that is
+    // still installed is left alone; that is the user's (or its uninstaller's) business.
+    QSettings run(runKey, QSettings::NativeFormat);
+    const QString legacy = run.value("Nexora").toString().trimmed();
+    if (legacy.isEmpty())
+        return;
+    const QString exe = legacy.startsWith(u'"') ? legacy.section(u'"', 1, 1) : legacy.section(u' ', 0, 0);
+    if (exe.isEmpty() || QFileInfo::exists(exe))
+        return;
+    run.remove("Nexora");
+    if (!run.contains(kRunValue))
+        run.setValue(kRunValue, startupCommand());
 }
 
 QString Settings::hotkey() const

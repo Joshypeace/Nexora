@@ -5,7 +5,7 @@
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"Omnipane.MessageWindow";
-constexpr int kHotkeyId = 0x4E58;
+constexpr int kHotkeyId = 0x4F50; // "OP"
 
 UINT activationMessage()
 {

@@ -68,6 +68,7 @@ private:
     void showItemMenu(const QPoint& position);
     void showAddMenu(QWidget* anchor);
     void restoreAfterDialog();
+    void updateLogo();
     void ensureOverlays();
     void showOverlays();
     void dismissIfInactive(int delayMs);
@@ -80,6 +81,8 @@ private:
     AppDelegate* m_delegate;
     std::vector<std::unique_ptr<DimOverlay>> m_overlays; // one per monitor
 
+    static constexpr int kLogoSize = 22;
+    QLabel* m_logo = nullptr;
     QWidget* m_content = nullptr;
     QLineEdit* m_search = nullptr;
     QListView* m_view = nullptr;

@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QEvent>
 #include <QFont>
+#include <QIcon>
 #include <QMenu>
 #include <QPalette>
 #include <QStyleFactory>
@@ -52,6 +53,15 @@ protected:
 } // namespace
 
 namespace Theme {
+
+QIcon appIcon()
+{
+    QIcon icon;
+    for (const int size : {16, 20, 24, 32, 40, 48})
+        icon.addFile(QStringLiteral(":/logo-%1.png").arg(size), QSize(size, size));
+    icon.addFile(QStringLiteral(":/logo.png"), QSize(256, 256));
+    return icon;
+}
 
 void apply(QApplication& app)
 {

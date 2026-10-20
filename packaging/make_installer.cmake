@@ -158,7 +158,7 @@ ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
          (Settings::startupCommand). It is managed with conditioned actions instead of a
          component, because Windows Installer deletes a component-owned value by name on
          uninstall even when it points at a portable copy, and re-creates it on repair.
-           - Fresh install: add it, unless a Omnipane entry already exists.
+           - Fresh install: add it, unless an Omnipane entry already exists.
            - Upgrades and repairs: leave it exactly as the user set it.
            - Real uninstall: remove it only if it points at this installation.
          Every change has a rollback counterpart. -->
