@@ -10,9 +10,14 @@ namespace WindowEffects {
 // Safe to call repeatedly (e.g. after a DPI change).
 void removeTitleBar(QWidget* window);
 
+enum class Backdrop {
+    None,   // no blur available: paint an opaque background
+    Legacy, // Windows 10 acrylic accent (moving the window is laggy)
+    System, // Windows 11 DWM system backdrop
+};
+
 // Enables a dark acrylic backdrop behind the window: the Windows 11 system
 // backdrop where available, otherwise the legacy Windows 10 acrylic accent.
-// Returns false when neither is available and the caller must paint an opaque background.
-bool enableAcrylic(QWidget* window);
+Backdrop enableAcrylic(QWidget* window);
 
 } // namespace WindowEffects

@@ -22,7 +22,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
-#include <windows.h>
+#include <QPropertyAnimation>
 
 #include <algorithm>
 #include <memory>
@@ -150,32 +150,47 @@ private slots:
 
     void opensWithASettlingWobble()
     {
-        BOOL animations = TRUE;
-        SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0);
-        const int home = m_window->pos().y(); // settled position from the initial open
+        // Driven through the animation's own clock rather than wall-clock sampling, so a busy
+        // machine can't skip the overshoot and the cursor's monitor doesn't matter.
+        QPropertyAnimation* wobble = nullptr;
+        for (QPropertyAnimation* animation : m_window->findChildren<QPropertyAnimation*>()) {
+            if (animation->targetObject() == m_window.get() && animation->propertyName() == "pos")
+                wobble = animation;
+        }
+        QVERIFY(wobble);
 
         m_window->dismiss();
         m_window->summon();
-        if (!m_window->isVisible())
-            QSKIP("the launcher could not be reopened");
+        const bool animating = wobble->state() == QAbstractAnimation::Running;
+        if (animating)
+            wobble->pause(); // freeze at its first frame while we check activation
+        if (!QTest::qWaitForWindowActive(m_window.get()))
+            QSKIP("Windows did not let the reopened launcher take the foreground");
 
-        QList<int> offsets; // y relative to the resting position, sampled through the animation
-        QElapsedTimer clock;
-        clock.start();
-        while (clock.elapsed() < 900) {
-            offsets.append(m_window->pos().y() - home);
-            QTest::qWait(10);
-        }
-
-        QCOMPARE(m_window->pos().y(), home); // always comes to rest exactly in place
-        if (!animations) {
-            QVERIFY(std::all_of(offsets.begin(), offsets.end(), [](int o) { return o == 0; }));
+        if (!animating) {
+            // Animation effects off (or no Windows 11 backdrop): it opens in place, motionless.
+            const QPoint opened = m_window->pos();
+            QTest::qWait(300);
+            QCOMPARE(m_window->pos(), opened);
             return;
         }
-        QVERIFY2(offsets.first() > 0, "should start slightly below its resting place");
-        const int highest = *std::min_element(offsets.begin(), offsets.end());
+
+        const QPoint home = wobble->endValue().toPoint();
+        QCOMPARE(wobble->startValue().toPoint(), home + QPoint(0, 16)); // starts slightly low
+        QCOMPARE(wobble->duration(), 620);
+
+        int highest = 0; // most negative offset = largest upward overshoot
+        for (int t = 0; t <= wobble->duration(); t += 5) {
+            wobble->setCurrentTime(t);
+            highest = std::min(highest, m_window->pos().y() - home.y());
+            QCOMPARE(m_window->pos().x(), home.x()); // purely vertical
+        }
         QVERIFY2(highest < 0, "should overshoot upwards (the wobble)");
         QVERIFY2(highest >= -12, "the wobble should stay subtle");
+
+        wobble->setCurrentTime(wobble->duration());
+        QCOMPARE(m_window->pos(), home); // comes to rest exactly in place
+        wobble->stop();
     }
 
     void showsAllAppsSelectingTheFirst()
@@ -218,15 +233,25 @@ private slots:
 
     void highlightsOnHover()
     {
-        const QModelIndex target = m_view->model()->index(3, 0);
+        // Use a tile away from the real mouse pointer: Windows reports the pointer's position
+        // whenever the window moves under it, which would highlight that tile already.
+        const QPoint pointer = m_view->viewport()->mapFromGlobal(QCursor::pos());
+        QModelIndex target;
+        for (int row = 3; row < m_view->model()->rowCount() && !target.isValid(); ++row) {
+            const QModelIndex candidate = m_view->model()->index(row, 0);
+            if (!m_view->visualRect(candidate).adjusted(-8, -8, 8, 8).contains(pointer))
+                target = candidate;
+        }
+        QVERIFY(target.isValid());
         const QRect rect = m_view->visualRect(target);
         const QImage before = m_view->viewport()->grab().toImage();
         // The QWindow overload injects through Qt's platform layer; the QWidget overload
         // would move the real OS cursor (QCursor::setPos).
         QTest::mouseMove(m_window->windowHandle(), m_view->viewport()->mapTo(m_window.get(), rect.center()));
-        QTest::qWait(150);
-        QCOMPARE(m_view->indexAt(rect.center()), target);
+        // Render right away: if the real pointer rests inside the launcher, Windows can deliver
+        // its own mouse moves moments later and legitimately move the hover back there.
         const QImage after = m_view->viewport()->grab().toImage();
+        QCOMPARE(m_view->indexAt(rect.center()), target);
         // The hover highlight must change the tile's background (corner area, away from icon and text).
         const QPoint probe = ((QPointF(rect.topLeft()) + QPointF(14, 14)) * before.devicePixelRatio()).toPoint();
         qInfo() << "hover probe" << rect << probe << Qt::hex << before.pixel(probe) << after.pixel(probe)

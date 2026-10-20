@@ -102,6 +102,7 @@ private:
     QPixmap m_backgroundScaled;
     QElapsedTimer m_sinceDismiss;
     bool m_acrylic = false;
+    bool m_wobbleSupported = false;
     bool m_busy = false;
     bool m_dimDesktop = true;
     int m_modalDepth = 0; // > 0 while a dialog owned by the launcher is open

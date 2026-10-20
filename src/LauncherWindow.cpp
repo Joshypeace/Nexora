@@ -235,7 +235,11 @@ LauncherWindow::LauncherWindow(QWidget* parent)
 
     // Create the native window now so DWM styling is in place before the first show.
     winId();
-    m_acrylic = WindowEffects::enableAcrylic(this);
+    const WindowEffects::Backdrop backdrop = WindowEffects::enableAcrylic(this);
+    m_acrylic = backdrop != WindowEffects::Backdrop::None;
+    // Moving a window with the Windows 10 legacy acrylic stutters, so only wobble on the
+    // Windows 11 system backdrop.
+    m_wobbleSupported = backdrop == WindowEffects::Backdrop::System;
     WindowEffects::removeTitleBar(this);
     updateState();
 }
@@ -363,7 +367,7 @@ void LauncherWindow::summon()
         showOverlays();
 
     // Start from the wobble's first frame so the window never flashes at its final spot.
-    const bool wobble = animationsEnabled();
+    const bool wobble = m_wobbleSupported && animationsEnabled();
     if (wobble)
         move(topLeft + QPoint(0, kWobbleDrop));
 
