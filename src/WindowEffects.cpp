@@ -80,7 +80,7 @@ void removeTitleBar(QWidget* window)
     DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 }
 
-bool enableAcrylic(QWidget* window)
+Backdrop enableAcrylic(QWidget* window)
 {
     const HWND hwnd = nativeHandle(window);
 
@@ -93,9 +93,9 @@ bool enableAcrylic(QWidget* window)
 
     const DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW; // acrylic
     if (SUCCEEDED(DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop))))
-        return true;
+        return Backdrop::System;
 
-    return enableLegacyAcrylic(hwnd);
+    return enableLegacyAcrylic(hwnd) ? Backdrop::Legacy : Backdrop::None;
 }
 
 } // namespace WindowEffects

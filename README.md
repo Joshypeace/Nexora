@@ -5,7 +5,7 @@
 A small floating application launcher for Windows. Press **Ctrl+Space**, type a few letters, press **Enter**, and you're back to work.
 
 - Compact frosted-glass window (native Windows 11 acrylic, rounded corners, DWM shadow) over a dimmed desktop
-- Opens with a short, springy wobble into place, which is skipped when Windows' *Animation effects* setting is off
+- Opens with a short, springy wobble into place. It is skipped when Windows' *Animation effects* setting is off, and on the Windows 10 fallback, where moving an acrylic window stutters.
 - Real application icons, including the unplated artwork of Store apps
 - Instant case-insensitive search: prefix, word-start and initials (`vsc` → *Visual Studio Code*)
 - Full keyboard control, single-click launching, Escape or click outside to dismiss
@@ -83,7 +83,7 @@ cmake --build --preset release --target portable installer
 | `tst_discovery` | Custom-folder depth and noise filtering, `.url` handling, Start menu discovery, cancellation, icon extraction (desktop and packaged) |
 | `tst_launcher` | Elevation rules, error reporting, async result delivery and lifetime safety |
 | `tst_watcher` | Recursive change detection, ignoring unrelated writes and the data folder, subfolders stay renameable |
-| `tst_ui` | The real launcher window: typing, keyboard navigation, column layout, hover highlight, `+` menu, context menu, empty/loading states, Enter and Esc. It saves snapshots to `out/build/<preset>/tests/snapshots`. Mouse input goes through Qt's window-level injection, so the OS cursor is never moved. If you click elsewhere during the run, the launcher dismisses itself and the remaining checks are skipped. |
+| `tst_ui` | The real launcher window: the opening wobble (start offset, a subtle overshoot and settling exactly in place, or no motion when animations are off), typing, keyboard navigation, column layout, hover highlight, `+` menu, context menu, empty/loading states, Enter and Esc. It saves snapshots to `out/build/<preset>/tests/snapshots`. Mouse input goes through Qt's window-level injection, so the OS cursor is never moved. If you click elsewhere during the run, the launcher dismisses itself and the remaining checks are skipped. |
 
 Tests use a temporary data folder (`OMNIPANE_DATA_DIR`), so they never touch your real settings or cache. `tst_ui` is labelled `ui`; skip it with `ctest -LE ui`.
 
