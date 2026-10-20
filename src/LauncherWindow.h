@@ -35,6 +35,9 @@ public:
     void toggleFromTray();
     void warmUp();
 
+    // True when opening plays the wobble: Windows 11 system backdrop and animations enabled.
+    bool wobbleEnabled() const { return m_wobbleSupported && animationsEnabled(); }
+
     void setApps(const std::vector<AppEntry>& apps);
     void updateIcons(const QHash<QString, QImage>& icons);
     void setHiddenIds(const QStringList& ids);

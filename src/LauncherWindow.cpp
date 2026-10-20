@@ -367,7 +367,7 @@ void LauncherWindow::summon()
         showOverlays();
 
     // Start from the wobble's first frame so the window never flashes at its final spot.
-    const bool wobble = m_wobbleSupported && animationsEnabled();
+    const bool wobble = wobbleEnabled();
     if (wobble)
         move(topLeft + QPoint(0, kWobbleDrop));
 

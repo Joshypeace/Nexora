@@ -164,6 +164,15 @@ private slots:
         const bool animating = wobble->state() == QAbstractAnimation::Running;
         if (animating)
             wobble->pause(); // freeze at its first frame while we check activation
+        // Whatever happens below, never leave the window parked at the wobble's start.
+        const auto settle = qScopeGuard([&] {
+            if (wobble->state() != QAbstractAnimation::Stopped) {
+                wobble->setCurrentTime(wobble->duration());
+                wobble->stop();
+            }
+        });
+        // It must run exactly when expected (a silently disabled wobble is a bug).
+        QCOMPARE(animating, m_window->wobbleEnabled());
         if (!QTest::qWaitForWindowActive(m_window.get()))
             QSKIP("Windows did not let the reopened launcher take the foreground");
 
@@ -190,7 +199,6 @@ private slots:
 
         wobble->setCurrentTime(wobble->duration());
         QCOMPARE(m_window->pos(), home); // comes to rest exactly in place
-        wobble->stop();
     }
 
     void showsAllAppsSelectingTheFirst()
