@@ -17,6 +17,7 @@ class DimOverlay;
 class QLabel;
 class QLineEdit;
 class QListView;
+class QPropertyAnimation;
 class QStackedWidget;
 class Spinner;
 
@@ -69,6 +70,8 @@ private:
     void showAddMenu(QWidget* anchor);
     void restoreAfterDialog();
     void updateLogo();
+    void playWobble(const QPoint& home);
+    static bool animationsEnabled();
     void ensureOverlays();
     void showOverlays();
     void dismissIfInactive(int delayMs);
@@ -82,6 +85,8 @@ private:
     std::vector<std::unique_ptr<DimOverlay>> m_overlays; // one per monitor
 
     static constexpr int kLogoSize = 22;
+    static constexpr int kWobbleDrop = 16; // px below the resting spot where opening starts
+    QPropertyAnimation* m_wobble = nullptr;
     QLabel* m_logo = nullptr;
     QWidget* m_content = nullptr;
     QLineEdit* m_search = nullptr;

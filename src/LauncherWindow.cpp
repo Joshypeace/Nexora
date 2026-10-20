@@ -158,6 +158,13 @@ LauncherWindow::LauncherWindow(QWidget* parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setWindowTitle(QStringLiteral("Omnipane"));
+
+    m_wobble = new QPropertyAnimation(this, "pos", this);
+    m_wobble->setDuration(620);
+    QEasingCurve spring(QEasingCurve::OutElastic);
+    spring.setAmplitude(1.0);
+    spring.setPeriod(0.42);
+    m_wobble->setEasingCurve(spring);
     setFixedSize(kWindowSize);
     m_filter->setSourceModel(m_model);
 
@@ -355,12 +362,19 @@ void LauncherWindow::summon()
     if (m_dimDesktop)
         showOverlays();
 
+    // Start from the wobble's first frame so the window never flashes at its final spot.
+    const bool wobble = animationsEnabled();
+    if (wobble)
+        move(topLeft + QPoint(0, kWobbleDrop));
+
     show();
     raise();
     activateWindow();
     SetForegroundWindow(reinterpret_cast<HWND>(winId()));
     m_search->setFocus();
     playRevealAnimation();
+    if (wobble)
+        playWobble(topLeft);
     emit shown();
 }
 
@@ -369,6 +383,7 @@ void LauncherWindow::dismiss()
     // Never hide the owner of an open file dialog.
     if (!isVisible() || m_modalDepth > 0)
         return;
+    m_wobble->stop();
     for (const auto& overlay : m_overlays)
         overlay->fadeOut();
     // Omnipane idles in the tray between uses; hand unused pages back to Windows once the
@@ -429,6 +444,25 @@ void LauncherWindow::toggleFromTray()
     if (!isVisible() && m_sinceDismiss.isValid() && m_sinceDismiss.elapsed() < 300)
         return;
     toggle();
+}
+
+bool LauncherWindow::animationsEnabled()
+{
+    // Windows' "Animation effects" setting (Accessibility > Visual effects).
+    BOOL enabled = TRUE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0))
+        return true;
+    return enabled != FALSE;
+}
+
+void LauncherWindow::playWobble(const QPoint& home)
+{
+    // A small spring: the window opens slightly low and settles into place with a gentle
+    // elastic overshoot. Moving the native window keeps DWM's acrylic, shadow and corners.
+    m_wobble->stop();
+    m_wobble->setStartValue(home + QPoint(0, kWobbleDrop));
+    m_wobble->setEndValue(home);
+    m_wobble->start();
 }
 
 void LauncherWindow::playRevealAnimation()

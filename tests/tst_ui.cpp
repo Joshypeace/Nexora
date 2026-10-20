@@ -22,6 +22,9 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <windows.h>
+
+#include <algorithm>
 #include <memory>
 
 class UiTest : public QObject {
@@ -120,7 +123,7 @@ private slots:
         // foreground lock can refuse that to a process started from a background shell.
         if (!QTest::qWaitForWindowActive(m_window.get()))
             QSKIP("Windows did not let the test process take the foreground");
-        QTest::qWait(300); // reveal animation
+        QTest::qWait(800); // fade and wobble
 
         m_search = m_window->findChild<QLineEdit*>(QStringLiteral("search"));
         m_view = m_window->findChild<QListView*>();
@@ -143,6 +146,36 @@ private slots:
         if (m_lostActivationWhileVisible)
             QSKIP("another application took the foreground during the run");
         QFAIL("the launcher was dismissed unexpectedly");
+    }
+
+    void opensWithASettlingWobble()
+    {
+        BOOL animations = TRUE;
+        SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0);
+        const int home = m_window->pos().y(); // settled position from the initial open
+
+        m_window->dismiss();
+        m_window->summon();
+        if (!m_window->isVisible())
+            QSKIP("the launcher could not be reopened");
+
+        QList<int> offsets; // y relative to the resting position, sampled through the animation
+        QElapsedTimer clock;
+        clock.start();
+        while (clock.elapsed() < 900) {
+            offsets.append(m_window->pos().y() - home);
+            QTest::qWait(10);
+        }
+
+        QCOMPARE(m_window->pos().y(), home); // always comes to rest exactly in place
+        if (!animations) {
+            QVERIFY(std::all_of(offsets.begin(), offsets.end(), [](int o) { return o == 0; }));
+            return;
+        }
+        QVERIFY2(offsets.first() > 0, "should start slightly below its resting place");
+        const int highest = *std::min_element(offsets.begin(), offsets.end());
+        QVERIFY2(highest < 0, "should overshoot upwards (the wobble)");
+        QVERIFY2(highest >= -12, "the wobble should stay subtle");
     }
 
     void showsAllAppsSelectingTheFirst()

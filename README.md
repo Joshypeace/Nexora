@@ -5,6 +5,7 @@
 A small floating application launcher for Windows. Press **Ctrl+Space**, type a few letters, press **Enter**, and you're back to work.
 
 - Compact frosted-glass window (native Windows 11 acrylic, rounded corners, DWM shadow) over a dimmed desktop
+- Opens with a short, springy wobble into place, which is skipped when Windows' *Animation effects* setting is off
 - Real application icons, including the unplated artwork of Store apps
 - Instant case-insensitive search: prefix, word-start and initials (`vsc` → *Visual Studio Code*)
 - Full keyboard control, single-click launching, Escape or click outside to dismiss
