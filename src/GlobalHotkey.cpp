@@ -4,12 +4,12 @@
 
 namespace {
 
-constexpr wchar_t kWindowClass[] = L"Nexora.MessageWindow";
+constexpr wchar_t kWindowClass[] = L"Omnipane.MessageWindow";
 constexpr int kHotkeyId = 0x4E58;
 
 UINT activationMessage()
 {
-    static const UINT message = RegisterWindowMessageW(L"Nexora.ShowLauncher");
+    static const UINT message = RegisterWindowMessageW(L"Omnipane.ShowLauncher");
     return message;
 }
 
@@ -80,7 +80,7 @@ GlobalHotkey::GlobalHotkey(QObject* parent)
     windowClass.lpszClassName = kWindowClass;
     RegisterClassExW(&windowClass);
 
-    m_window = CreateWindowExW(0, kWindowClass, L"Nexora", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, nullptr);
+    m_window = CreateWindowExW(0, kWindowClass, L"Omnipane", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, nullptr);
     if (m_window)
         SetWindowLongPtrW(m_window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 }

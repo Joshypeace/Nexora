@@ -1,5 +1,5 @@
 #include "GlobalHotkey.h"
-#include "NexoraApp.h"
+#include "OmnipaneApp.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -21,7 +21,7 @@ using UniqueHandle = std::unique_ptr<std::remove_pointer_t<HANDLE>, HandleCloser
 int main(int argc, char* argv[])
 {
     // One launcher per user session; a second start just opens the running one.
-    const UniqueHandle instanceMutex(CreateMutexW(nullptr, FALSE, L"Local\\Nexora.SingleInstance"));
+    const UniqueHandle instanceMutex(CreateMutexW(nullptr, FALSE, L"Local\\Omnipane.SingleInstance"));
     if (instanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
         for (int attempt = 0; attempt < 30 && !GlobalHotkey::signalRunningInstance(); ++attempt)
             Sleep(100);
@@ -29,15 +29,15 @@ int main(int argc, char* argv[])
     }
 
     QApplication app(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("Nexora"));
-    QApplication::setApplicationVersion(QStringLiteral(NEXORA_VERSION));
+    QApplication::setApplicationName(QStringLiteral("Omnipane"));
+    QApplication::setApplicationVersion(QStringLiteral(OMNIPANE_VERSION));
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/logo.png")));
     Theme::apply(app);
 
     const bool startHidden = QApplication::arguments().contains(QStringLiteral("--background"));
 
-    NexoraApp nexora;
-    nexora.start(!startHidden);
+    OmnipaneApp omnipane;
+    omnipane.start(!startHidden);
     return QApplication::exec();
 }

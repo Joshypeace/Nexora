@@ -1,4 +1,4 @@
-# Builds Nexora's per-user MSI from the deployed dist folder with WiX Toolset v3.
+# Builds Omnipane's per-user MSI from the deployed dist folder with WiX Toolset v3.
 # Invoked by the `installer` target:
 #   cmake -DDIST_DIR=... -DOUT_DIR=... -DVERSION=... -DWIX_BIN=... -DICON=... -P make_installer.cmake
 #
@@ -20,9 +20,9 @@ if(TEST_HOOKS)
 endif()
 
 # Stable across releases; MajorUpgrade replaces older versions with the same UpgradeCode.
-set(UPGRADE_CODE "6F7C3A52-1D4E-4B8F-9A2C-5E0B7D31C9A4")
-set(GUID_NAMESPACE "2B9E6C41-7F03-4D5A-8E1B-C6A9D0F43E72")
-set(REG_KEY "Software\\Nexora\\Installer")
+set(UPGRADE_CODE "9E4FD807-7455-42CA-B5C8-B8F73BD684A8")
+set(GUID_NAMESPACE "36BFE5D4-1801-45B3-A789-D17DF3F8A947")
+set(REG_KEY "Software\\Omnipane\\Installer")
 
 file(GLOB_RECURSE files RELATIVE "${DIST_DIR}" "${DIST_DIR}/*")
 list(SORT files)
@@ -90,47 +90,47 @@ endforeach()
 string(UUID shortcut_guid NAMESPACE "${GUID_NAMESPACE}" NAME "component:shortcuts" TYPE SHA1 UPPER)
 
 # Autostart commands (see the comment in the generated .wxs). reg.exe stores exactly
-#   "<install folder>\Nexora.exe" --background
-set(reg_delete "&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /f")
-set(reg_add "&quot;[System64Folder]reg.exe&quot; add &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Nexora /t REG_SZ /d &quot;\\&quot;[INSTALLFOLDER]Nexora.exe\\&quot; --background&quot; /f")
+#   "<install folder>\Omnipane.exe" --background
+set(reg_delete "&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Omnipane /f")
+set(reg_add "&quot;[System64Folder]reg.exe&quot; add &quot;HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run&quot; /v Omnipane /t REG_SZ /d &quot;\\&quot;[INSTALLFOLDER]Omnipane.exe\\&quot; --background&quot; /f")
 set(fresh_install "NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT EXISTING_AUTOSTART AND NOT REMOVE")
 set(owned_uninstall "EXISTING_AUTOSTART ~= INSTALLED_AUTOSTART_COMMAND AND REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE")
 string(UUID programs_guid NAMESPACE "${GUID_NAMESPACE}" NAME "component:programs-folder" TYPE SHA1 UPPER)
 file(TO_NATIVE_PATH "${ICON}" icon_source)
 
 file(MAKE_DIRECTORY "${OUT_DIR}")
-set(wxs "${OUT_DIR}/Nexora.wxs")
+set(wxs "${OUT_DIR}/Omnipane.wxs")
 file(WRITE "${wxs}" "<?xml version=\"1.0\" encoding=\"utf-8\"?>
 <Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\" xmlns:util=\"http://schemas.microsoft.com/wix/UtilExtension\">
-  <Product Id=\"*\" Name=\"Nexora\" Language=\"1033\" Version=\"${VERSION}\" Manufacturer=\"Nexora\"
+  <Product Id=\"*\" Name=\"Omnipane\" Language=\"1033\" Version=\"${VERSION}\" Manufacturer=\"Omnipane\"
            UpgradeCode=\"${UPGRADE_CODE}\">
     <Package InstallerVersion=\"500\" Compressed=\"yes\" InstallScope=\"perUser\" InstallPrivileges=\"limited\"
-             Description=\"Nexora application launcher\" />
+             Description=\"Omnipane application launcher\" />
     <!-- Same-version rebuilds replace the installed copy instead of installing side by side.
          The old product is removed completely before the new one installs (the default
          afterInstallValidate scheduling), so per-folder components may change between builds. -->
-    <MajorUpgrade AllowSameVersionUpgrades=\"yes\" DowngradeErrorMessage=\"A newer version of Nexora is already installed.\" />
+    <MajorUpgrade AllowSameVersionUpgrades=\"yes\" DowngradeErrorMessage=\"A newer version of Omnipane is already installed.\" />
     <MediaTemplate EmbedCab=\"yes\" />
 
-    <!-- Nexora normally runs in the tray. Ask it to quit (it exits on WM_CLOSE while hidden)
+    <!-- Omnipane normally runs in the tray. Ask it to quit (it exits on WM_CLOSE while hidden)
          so its files are not in use during an upgrade or uninstall. -->
-    <util:CloseApplication Id=\"CloseNexora\" Target=\"Nexora.exe\" CloseMessage=\"yes\" RebootPrompt=\"no\" />
+    <util:CloseApplication Id=\"CloseOmnipane\" Target=\"Omnipane.exe\" CloseMessage=\"yes\" RebootPrompt=\"no\" />
 
     <!-- Current \"Start with Windows\" entry (the tray menu writes and deletes it too). -->
     <Property Id=\"EXISTING_AUTOSTART\">
       <RegistrySearch Id=\"FindAutostart\" Root=\"HKCU\" Key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Run\"
-                      Name=\"Nexora\" Type=\"raw\" />
+                      Name=\"Omnipane\" Type=\"raw\" />
     </Property>
 
-    <Icon Id=\"NexoraIcon\" SourceFile=\"${icon_source}\" />
-    <Property Id=\"ARPPRODUCTICON\" Value=\"NexoraIcon\" />
+    <Icon Id=\"OmnipaneIcon\" SourceFile=\"${icon_source}\" />
+    <Property Id=\"ARPPRODUCTICON\" Value=\"OmnipaneIcon\" />
     <Property Id=\"ARPNOMODIFY\" Value=\"1\" />
     <Property Id=\"ARPCOMMENTS\" Value=\"A minimal floating application launcher. Press Ctrl+Space to open.\" />
 
     <Directory Id=\"TARGETDIR\" Name=\"SourceDir\">
       <Directory Id=\"LocalAppDataFolder\">
         <Directory Id=\"LocalProgramsFolder\" Name=\"Programs\">
-          <Directory Id=\"INSTALLFOLDER\" Name=\"Nexora\">
+          <Directory Id=\"INSTALLFOLDER\" Name=\"Omnipane\">
 ${directory_xml}          </Directory>
         </Directory>
       </Directory>
@@ -144,12 +144,12 @@ ${component_xml}
     </Component>
 
     <Component Id=\"CMP_Shortcuts\" Directory=\"ProgramMenuFolder\" Guid=\"${shortcut_guid}\">
-      <Shortcut Id=\"StartMenuShortcut\" Name=\"Nexora\" Description=\"Open the Nexora launcher\"
-                Target=\"[INSTALLFOLDER]Nexora.exe\" WorkingDirectory=\"INSTALLFOLDER\" />
+      <Shortcut Id=\"StartMenuShortcut\" Name=\"Omnipane\" Description=\"Open the Omnipane launcher\"
+                Target=\"[INSTALLFOLDER]Omnipane.exe\" WorkingDirectory=\"INSTALLFOLDER\" />
       <RegistryValue Root=\"HKCU\" Key=\"${REG_KEY}\" Name=\"CMP_Shortcuts\" Type=\"integer\" Value=\"1\" KeyPath=\"yes\" />
     </Component>
 
-    <Feature Id=\"Main\" Title=\"Nexora\" Level=\"1\" Absent=\"disallow\">
+    <Feature Id=\"Main\" Title=\"Omnipane\" Level=\"1\" Absent=\"disallow\">
 ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
       <ComponentRef Id=\"CMP_Shortcuts\" />
     </Feature>
@@ -158,12 +158,12 @@ ${component_refs}      <ComponentRef Id=\"CMP_ProgramsFolder\" />
          (Settings::startupCommand). It is managed with conditioned actions instead of a
          component, because Windows Installer deletes a component-owned value by name on
          uninstall even when it points at a portable copy, and re-creates it on repair.
-           - Fresh install: add it, unless a Nexora entry already exists.
+           - Fresh install: add it, unless a Omnipane entry already exists.
            - Upgrades and repairs: leave it exactly as the user set it.
            - Real uninstall: remove it only if it points at this installation.
          Every change has a rollback counterpart. -->
     <CustomAction Id=\"SetInstalledAutostartCommand\" Property=\"INSTALLED_AUTOSTART_COMMAND\"
-                  Value=\"&quot;[INSTALLFOLDER]Nexora.exe&quot; --background\" />
+                  Value=\"&quot;[INSTALLFOLDER]Omnipane.exe&quot; --background\" />
     <CustomAction Id=\"SetAddAutostartCommand\" Property=\"AddAutostart\" Value=\"${reg_add}\" />
     <CustomAction Id=\"AddAutostart\" BinaryKey=\"WixCA\" DllEntry=\"WixQuietExec64\"
                   Execute=\"deferred\" Impersonate=\"yes\" Return=\"ignore\" />
@@ -192,8 +192,8 @@ ${test_hooks_xml}
 </Wix>
 ")
 
-set(wixobj "${OUT_DIR}/Nexora.wixobj")
-set(msi "${OUT_DIR}/Nexora-${VERSION}-x64.msi")
+set(wixobj "${OUT_DIR}/Omnipane.wixobj")
+set(msi "${OUT_DIR}/Omnipane-${VERSION}-x64.msi")
 
 execute_process(COMMAND "${WIX_BIN}/candle.exe" -nologo -arch x64 -ext WixUtilExtension -out "${wixobj}" "${wxs}"
                 RESULT_VARIABLE result)

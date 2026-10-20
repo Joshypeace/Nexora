@@ -2,7 +2,7 @@
 
 class QApplication;
 
-// Nexora's visual theme for everything outside the launcher's own paint code:
+// Omnipane's visual theme for everything outside the launcher's own paint code:
 // palette, fonts, menus (including Qt's built-in context menus), tooltips and dialogs.
 namespace Theme {
 

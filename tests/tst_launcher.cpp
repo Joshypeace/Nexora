@@ -33,7 +33,7 @@ private slots:
     void reportsMissingPrograms()
     {
         const AppLauncher::Result result =
-            AppLauncher::launch(entry(AppKind::Executable, QStringLiteral("C:\\Nexora\\does-not-exist.exe")));
+            AppLauncher::launch(entry(AppKind::Executable, QStringLiteral("C:\\Omnipane\\does-not-exist.exe")));
         QVERIFY(!result.ok);
         QVERIFY(!result.error.isEmpty());
     }
@@ -43,7 +43,7 @@ private slots:
         QObject context;
         std::optional<AppLauncher::Result> received;
         Qt::HANDLE callbackThread = nullptr;
-        AppLauncher::launchAsync(entry(AppKind::Executable, QStringLiteral("C:\\Nexora\\does-not-exist.exe")), false,
+        AppLauncher::launchAsync(entry(AppKind::Executable, QStringLiteral("C:\\Omnipane\\does-not-exist.exe")), false,
                                  &context, [&](const AppLauncher::Result& result) {
                                      received = result;
                                      callbackThread = QThread::currentThreadId();
@@ -58,7 +58,7 @@ private slots:
         bool called = false;
         {
             QObject context;
-            AppLauncher::launchAsync(entry(AppKind::Executable, QStringLiteral("C:\\Nexora\\does-not-exist.exe")),
+            AppLauncher::launchAsync(entry(AppKind::Executable, QStringLiteral("C:\\Omnipane\\does-not-exist.exe")),
                                      false, &context, [&](const AppLauncher::Result&) { called = true; });
         }
         QThreadPool::globalInstance()->waitForDone(10000);

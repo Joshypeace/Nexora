@@ -12,12 +12,12 @@ ShortcutDialog::ShortcutDialog(const QKeySequence& current, QWidget* parent)
     : QDialog(parent)
     , m_edit(new QKeySequenceEdit(current, this))
 {
-    setWindowTitle(tr("Nexora shortcut"));
+    setWindowTitle(tr("Omnipane shortcut"));
     setWindowFlag(Qt::WindowStaysOnTopHint);
     m_edit->setMaximumSequenceLength(1);
     m_edit->setClearButtonEnabled(true);
 
-    auto* hint = new QLabel(tr("Press the key combination that should open Nexora.\n"
+    auto* hint = new QLabel(tr("Press the key combination that should open Omnipane.\n"
                                "It must include Ctrl, Alt or Win, for example Ctrl+Space or Alt+Space."),
                             this);
     hint->setWordWrap(true);

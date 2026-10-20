@@ -41,7 +41,7 @@ AppLauncher::Result shellExecute(const QString& file, const QString& directory, 
 
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof(info);
-    // NO_UI: failures are reported once, through Nexora's tray notification. UAC still prompts.
+    // NO_UI: failures are reported once, through Omnipane's tray notification. UAC still prompts.
     info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_LOG_USAGE | SEE_MASK_FLAG_NO_UI;
     info.lpVerb = elevated ? L"runas" : nullptr;
     info.lpFile = nativeFile.c_str();
@@ -103,7 +103,7 @@ Result launch(const AppEntry& app, bool elevated)
 
 void launchAsync(const AppEntry& app, bool elevated, QObject* context, std::function<void(const Result&)> onFinished)
 {
-    // Nexora hides as soon as the launch starts; let the new application take the foreground.
+    // Omnipane hides as soon as the launch starts; let the new application take the foreground.
     AllowSetForegroundWindow(ASFW_ANY);
 
     // QPointer may only be dereferenced on its object's thread, so the result is posted
