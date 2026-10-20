@@ -9,6 +9,7 @@
 
 #include <windows.h>
 
+#include <mutex>
 #include <string>
 
 namespace {
@@ -66,8 +67,11 @@ QString Settings::prepareDataDirectory(const QString& dir, const QString& legacy
     // Once per folder per process: copying later would happen underneath the live QSettings.
     // Keyed on the settings file rather than the folder, so a failed copy is retried at the
     // next start.
+    // dataDirectory() is also called from the discovery worker thread, hence the lock.
+    static std::mutex mutex;
     static QSet<QString> checked;
     const QString ini = dir + QStringLiteral("/omnipane.ini");
+    const std::lock_guard lock(mutex);
     if (!checked.contains(ini)) {
         checked.insert(ini);
         if (!QFileInfo::exists(ini))
@@ -105,7 +109,11 @@ void Settings::migrateLegacyAutostart(const QString& runKey)
     const QString legacy = run.value("Nexora").toString().trimmed();
     if (!legacy.startsWith(u'"')) // Nexora always wrote a quoted absolute path
         return;
-    const QFileInfo exe(expandEnvironment(legacy.section(u'"', 1, 1)));
+    const QString path = expandEnvironment(legacy.section(u'"', 1, 1));
+    // Network paths are skipped: checking an offline share would stall start-up for the SMB timeout.
+    if (path.startsWith(QStringLiteral("\\\\")) || path.startsWith(QStringLiteral("//")))
+        return;
+    const QFileInfo exe(path);
     const QFileInfo replacement(exe.absolutePath() + QStringLiteral("/Omnipane.exe"));
     if (!exe.isAbsolute() || !exe.dir().exists() || exe.exists() || !replacement.isFile())
         return;
