@@ -61,6 +61,12 @@ qt_add_resources(OmnipaneCore "omnipane_assets"
     BASE resources
     FILES
         resources/logo.png
+        resources/logo-16.png
+        resources/logo-20.png
+        resources/logo-24.png
+        resources/logo-32.png
+        resources/logo-40.png
+        resources/logo-48.png
         resources/background.jpg
 )
 

@@ -1,5 +1,6 @@
 #include "GlobalHotkey.h"
 #include "OmnipaneApp.h"
+#include "Settings.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -32,10 +33,13 @@ int main(int argc, char* argv[])
     QApplication::setApplicationName(QStringLiteral("Omnipane"));
     QApplication::setApplicationVersion(QStringLiteral(OMNIPANE_VERSION));
     QApplication::setQuitOnLastWindowClosed(false);
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/logo.png")));
     Theme::apply(app);
+    QApplication::setWindowIcon(Theme::appIcon());
 
     const bool startHidden = QApplication::arguments().contains(QStringLiteral("--background"));
+
+    // Before the tray menu reads the "Start with Windows" state.
+    Settings::migrateLegacyAutostart();
 
     OmnipaneApp omnipane;
     omnipane.start(!startHidden);

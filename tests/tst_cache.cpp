@@ -107,23 +107,81 @@ private slots:
 
     void migratesSettingsFromTheFormerName()
     {
-        const QString legacy = m_dir.filePath(QStringLiteral("Nexora/nexora.ini"));
+        const QString base = m_dir.filePath(QStringLiteral("migration"));
+        const QString legacy = base + QStringLiteral("/Nexora/nexora.ini");
         QDir().mkpath(QFileInfo(legacy).absolutePath());
         {
             QSettings old(legacy, QSettings::IniFormat);
             old.setValue("hotkey", QStringLiteral("Alt+Space"));
             old.setValue("customFolders", QStringList{QStringLiteral("D:\\PortableApps")});
         }
-        const QString target = m_dir.filePath(QStringLiteral("Omnipane/omnipane.ini"));
-        Settings::migrateLegacySettings(legacy, target);
-        const QSettings migrated(target, QSettings::IniFormat);
-        QCOMPARE(migrated.value("hotkey").toString(), QStringLiteral("Alt+Space"));
-        QCOMPARE(migrated.value("customFolders").toStringList(), QStringList{QStringLiteral("D:\\PortableApps")});
+        // Make it read-only: the copy must still be writable afterwards.
+        QFile::setPermissions(legacy, QFileDevice::ReadOwner | QFileDevice::ReadUser);
 
-        // Nothing to migrate is a no-op.
-        Settings::migrateLegacySettings(m_dir.filePath(QStringLiteral("missing.ini")),
-                                        m_dir.filePath(QStringLiteral("Other/omnipane.ini")));
-        QVERIFY(!QFileInfo::exists(m_dir.filePath(QStringLiteral("Other/omnipane.ini"))));
+        // 1. First start: the folder is created and settings are carried over.
+        const QString dir = base + QStringLiteral("/Omnipane");
+        QCOMPARE(Settings::prepareDataDirectory(dir, legacy), dir);
+        const QString ini = dir + QStringLiteral("/omnipane.ini");
+        {
+            const QSettings migrated(ini, QSettings::IniFormat);
+            QCOMPARE(migrated.value("hotkey").toString(), QStringLiteral("Alt+Space"));
+            QCOMPARE(migrated.value("customFolders").toStringList(), QStringList{QStringLiteral("D:\\PortableApps")});
+        }
+        QVERIFY(QFileInfo(ini).isWritable());
+
+        // 2. Later starts never overwrite Omnipane's own settings.
+        {
+            QSettings current(ini, QSettings::IniFormat);
+            current.setValue("hotkey", QStringLiteral("Ctrl+Alt+O"));
+        }
+        Settings::prepareDataDirectory(dir, legacy);
+        QCOMPARE(QSettings(ini, QSettings::IniFormat).value("hotkey").toString(), QStringLiteral("Ctrl+Alt+O"));
+
+        // 3. A folder that exists but has no settings yet (e.g. an earlier failed copy) is retried.
+        QFile::remove(ini);
+        Settings::prepareDataDirectory(dir, legacy);
+        QCOMPARE(QSettings(ini, QSettings::IniFormat).value("hotkey").toString(), QStringLiteral("Alt+Space"));
+
+        // 4. Nothing to migrate: just an empty folder.
+        const QString fresh = base + QStringLiteral("/Fresh");
+        Settings::prepareDataDirectory(fresh, base + QStringLiteral("/missing.ini"));
+        QVERIFY(QFileInfo(fresh).isDir());
+        QVERIFY(!QFileInfo::exists(fresh + QStringLiteral("/omnipane.ini")));
+
+        // 5. A portable folder from NEXORA_DATA_DIR converts its own nexora.ini in place.
+        const QString portable = base + QStringLiteral("/portable");
+        QDir().mkpath(portable);
+        QFile::copy(legacy, portable + QStringLiteral("/nexora.ini"));
+        Settings::prepareDataDirectory(portable, portable + QStringLiteral("/nexora.ini"));
+        QCOMPARE(QSettings(portable + QStringLiteral("/omnipane.ini"), QSettings::IniFormat).value("hotkey").toString(),
+                 QStringLiteral("Alt+Space"));
+        QFile::setPermissions(legacy, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    }
+
+    void migratesAStaleNexoraAutostartEntry()
+    {
+        // A throwaway HKCU key stands in for ...\CurrentVersion\Run.
+        const QString key = QStringLiteral("HKEY_CURRENT_USER\\Software\\OmnipaneTests\\Run");
+        QSettings run(key, QSettings::NativeFormat);
+
+        // Nexora still installed: leave its entry alone.
+        const QString live = QStringLiteral("\"C:\\Windows\\System32\\notepad.exe\" --background");
+        run.setValue("Nexora", live);
+        run.sync();
+        Settings::migrateLegacyAutostart(key);
+        run.sync();
+        QCOMPARE(run.value("Nexora").toString(), live);
+        QVERIFY(!run.contains("Omnipane"));
+
+        // Nexora's program is gone: the entry moves over to Omnipane.
+        run.setValue("Nexora", QStringLiteral("\"C:\\Omnipane-test\\gone\\Nexora.exe\" --background"));
+        run.sync();
+        Settings::migrateLegacyAutostart(key);
+        run.sync();
+        QVERIFY(!run.contains("Nexora"));
+        QVERIFY(run.value("Omnipane").toString().endsWith(QStringLiteral("\" --background")));
+
+        QSettings(QStringLiteral("HKEY_CURRENT_USER\\Software"), QSettings::NativeFormat).remove("OmnipaneTests");
     }
 
     void missingFileIsEmpty()

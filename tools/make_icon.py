@@ -1,8 +1,8 @@
 """Generates Omnipane's logo assets: resources/logo.png and resources/omnipane.ico.
 
 The mark is a glowing particle orb (magenta -> indigo -> cyan) on a dark rounded tile.
-Small icon sizes get a simplified drawing (no particles, thicker strokes) so they stay
-legible at 16-32 px.
+Sizes up to 48 px get a simplified drawing (no particles, thicker strokes) so they stay
+legible; those are also written as resources/logo-<size>.png for the app's own icon.
 
 Usage: python tools/make_icon.py
 Requires Pillow.
@@ -33,16 +33,30 @@ def palette(t):
 
 def gradient_layer(s, cx, cy, radius):
     """Colour field along the orb's lower-left -> upper-right diagonal, spanning the orb itself
-    so its rim reaches pure magenta and pure cyan."""
+    so its rim reaches pure magenta and pure cyan.
+
+    The colour only depends on x - y, so one lookup strip of 2*s colours is computed and each
+    row is a shifted slice of it (no per-pixel Python work)."""
+    strip = Image.new("RGB", (2 * s, 1))
+    spx = strip.load()
+    for k in range(2 * s):
+        # k = x + (s - y): recover (u + v) / 2 for any pixel on that diagonal.
+        x_minus_y = k - s
+        u_plus_v = (x_minus_y - (cx - radius) + (cy + radius)) / (2 * radius)
+        # The rim only spans roughly 0.15..0.85 of the diagonal; stretch it to the full palette.
+        spx[k, 0] = palette((u_plus_v / 2 - 0.15) / 0.7)
     img = Image.new("RGB", (s, s))
-    px = img.load()
     for y in range(s):
-        v = ((cy + radius) - y) / (2 * radius)
-        for x in range(s):
-            u = (x - (cx - radius)) / (2 * radius)
-            # The rim only spans roughly 0.15..0.85 of the diagonal; stretch it to the full palette.
-            px[x, y] = palette(((u + v) / 2 - 0.15) / 0.7)
+        img.paste(strip.crop((s - y, 0, 2 * s - y, 1)), (0, y))
     return img
+
+
+def vertical_gradient(s, top, bottom):
+    column = Image.new("RGB", (1, s))
+    cpx = column.load()
+    for y in range(s):
+        cpx[0, y] = lerp(top, bottom, y / (s - 1))
+    return column.resize((s, s))
 
 
 def tinted(mask, colours, alpha=1.0):
@@ -63,13 +77,7 @@ def render(size, simple):
     tile = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     tile_mask = Image.new("L", (s, s), 0)
     ImageDraw.Draw(tile_mask).rounded_rectangle((0, 0, s - 1, s - 1), radius=round(s * 0.23), fill=255)
-    base = Image.new("RGB", (s, s))
-    bpx = base.load()
-    for y in range(s):
-        c = lerp((14, 14, 40), (5, 6, 18), y / (s - 1))
-        for x in range(s):
-            bpx[x, y] = c
-    tile.paste(base, (0, 0), tile_mask)
+    tile.paste(vertical_gradient(s, (14, 14, 40), (5, 6, 18)), (0, 0), tile_mask)
     canvas = tile
 
     # Sphere body: deep indigo core with a hint of the palette.
@@ -90,7 +98,6 @@ def render(size, simple):
     # Flowing wave lines across the sphere, clipped to it.
     waves = Image.new("L", (s, s), 0)
     wd = ImageDraw.Draw(waves)
-    rng = random.Random(7)
     # Three wispy filaments with different rhythms, so they read as flowing strands, not a net.
     wave_specs = [(-0.30, 0.14, 1.15, 0.4), (0.02, 0.22, 0.85, 2.6), (0.34, 0.12, 1.4, 4.4)]
     if simple:
@@ -115,9 +122,11 @@ def render(size, simple):
 
     # Particle texture (large sizes only): denser towards the rim and along the waves.
     if not simple:
+        rng = random.Random(7)
         dots = Image.new("L", (s, s), 0)
         dd = ImageDraw.Draw(dots)
-        dot = s * 0.0045
+        # Keep particles at least ~1 output pixel wide so mid sizes don't turn to speckle.
+        dot = max(s * 0.0045, ss * 0.6)
         for _ in range(1400):
             angle = rng.uniform(0, 2 * math.pi)
             r = radius * (rng.random() ** 0.35)
@@ -142,14 +151,20 @@ def render(size, simple):
     return canvas.resize((size, size), Image.LANCZOS)
 
 
+SIMPLE_MAX = 48  # sizes up to this use the simplified drawing
+APP_ICON_SIZES = [16, 20, 24, 32, 40, 48]  # also shipped as PNGs for the tray and header
+
+
 def main():
     RES.mkdir(exist_ok=True)
-    large = render(256, simple=False)
-    large.save(RES / "logo.png")
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-    images = [render(n, simple=n <= 32) if n < 256 else large for n in sizes]
-    images[-1].save(RES / "omnipane.ico", sizes=[(n, n) for n in sizes], append_images=images[:-1])
-    print("wrote", RES / "logo.png", "and", RES / "omnipane.ico")
+    images = {n: render(n, simple=n <= SIMPLE_MAX) for n in sizes}
+    images[256].save(RES / "logo.png")
+    for n in APP_ICON_SIZES:
+        images[n].save(RES / f"logo-{n}.png")
+    images[256].save(RES / "omnipane.ico", sizes=[(n, n) for n in sizes],
+                     append_images=[images[n] for n in sizes[:-1]])
+    print("wrote logo.png, logo-<size>.png and omnipane.ico to", RES)
 
 
 if __name__ == "__main__":

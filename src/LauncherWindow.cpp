@@ -5,6 +5,7 @@
 #include "AppModel.h"
 #include "DimOverlay.h"
 #include "Spinner.h"
+#include "Theme.h"
 #include "WindowEffects.h"
 
 #include <QAbstractButton>
@@ -246,12 +247,9 @@ QWidget* LauncherWindow::buildHeader()
     row->setSpacing(10);
 
     auto* logo = new QLabel(header);
-    constexpr int kLogo = 22;
-    QPixmap logoPixmap = QPixmap(QStringLiteral(":/logo.png"))
-                             .scaled(kLogo * 3, kLogo * 3, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    logoPixmap.setDevicePixelRatio(3.0);
-    logo->setPixmap(logoPixmap);
-    logo->setFixedSize(kLogo, kLogo);
+    m_logo = logo;
+    logo->setFixedSize(kLogoSize, kLogoSize);
+    updateLogo();
 
     auto* title = new QLabel(QStringLiteral("Omnipane"), header);
     title->setObjectName(QStringLiteral("title"));
@@ -267,6 +265,13 @@ QWidget* LauncherWindow::buildHeader()
     row->addWidget(add);
     row->addWidget(close);
     return header;
+}
+
+void LauncherWindow::updateLogo()
+{
+    // The small, simplified drawing at this screen's pixel density (24 px at 100 %, 48 px at 200 %).
+    const qreal dpr = windowHandle() ? windowHandle()->devicePixelRatio() : qApp->devicePixelRatio();
+    m_logo->setPixmap(Theme::appIcon().pixmap(QSize(kLogoSize, kLogoSize), dpr));
 }
 
 QWidget* LauncherWindow::buildEmptyState()
@@ -345,6 +350,7 @@ void LauncherWindow::summon()
     move(topLeft);
     WindowEffects::removeTitleBar(this); // re-measure for the target monitor's DPI
     move(topLeft);
+    updateLogo();
 
     if (m_dimDesktop)
         showOverlays();
@@ -710,6 +716,7 @@ bool LauncherWindow::nativeEvent(const QByteArray& eventType, void* message, qin
             WindowEffects::removeTitleBar(this);
             m_backgroundScaled = {};
             m_model->setDevicePixelRatio(devicePixelRatioF());
+            updateLogo();
         });
         break;
     default:
