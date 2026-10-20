@@ -117,7 +117,7 @@ hiddenApps=app:c:/windows/system32/...|
 
 **Moving from Nexora.** Omnipane was previously called Nexora.
 - **Settings:** while Omnipane has no settings of its own, it copies them from `%LOCALAPPDATA%\Nexora\nexora.ini`: hotkey, custom apps and folders, hidden apps and dimming.
-- **Portable setups:** these can keep using the old `NEXORA_DATA_DIR` variable. A `nexora.ini` in that folder is copied to `omnipane.ini`. The alias is meant for replacing Nexora; running both against the same folder makes them overwrite each other's cache.
+- **Portable setups:** these can keep using the old `NEXORA_DATA_DIR` variable. A `nexora.ini` in the data folder (set by either variable) is copied to `omnipane.ini`. The alias is meant for replacing Nexora; running both against the same folder makes them overwrite each other's cache.
 - **Start with Windows:** if a portable `Nexora.exe` was replaced by `Omnipane.exe` in the same folder, its autostart entry moves to that `Omnipane.exe`. Anything else, such as a Nexora that is still present or a drive that isn't connected, is left alone.
 - **An installed Nexora:** it is otherwise separate, with its own tray icon and autostart. Uninstall it so the two don't compete for Ctrl+Space.
 

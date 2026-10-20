@@ -205,6 +205,11 @@ private slots:
         QVERIFY(!value("Nexora").isEmpty());
         QVERIFY(value("Omnipane").isEmpty());
 
+        // Network paths are never probed (an offline share would stall start-up): untouched.
+        runWith(QStringLiteral("\"\\\\nas\\tools\\Nexora.exe\" --background"));
+        QVERIFY(!value("Nexora").isEmpty());
+        QVERIFY(value("Omnipane").isEmpty());
+
         // Unquoted or relative command lines are not guessed at: untouched.
         runWith(QStringLiteral("Nexora.exe --background"));
         QVERIFY(!value("Nexora").isEmpty());
